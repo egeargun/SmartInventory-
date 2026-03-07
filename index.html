@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <title>Akıllı Envanter Dashboard</title>
+</head>
+<body style="font-family: Arial, sans-serif; padding: 50px;">
+
+    <h2>📊 Akıllı Envanter Özeti</h2>
+    
+    <div style="border: 2px solid #4CAF50; padding: 20px; width: 300px; border-radius: 10px; background-color: #f9f9f9;">
+        <h3 style="margin-top: 0; color: #333;">💰 Toplam Yatırım Maliyeti</h3>
+        <h1 id="toplam-yatirim-kutusu" style="color: #4CAF50;">Yükleniyor...</h1>
+    </div>
+
+    <script>
+        // API'den veriyi çeken fonksiyon
+        async function paneliGuncelle() {
+            try {
+                // 1. Senin yazdığın uç noktaya (endpoint) istek atıyoruz
+                const response = await fetch("http://127.0.0.1:8000/dashboard-ozet");
+                const data = await response.json();
+
+                // 2. Gelen JSON verisinin içinden tam olarak o rakamı buluyoruz
+                const maliyet = data.finansal_durum.toplam_yatirim_maliyeti;
+
+                // 3. HTML'deki "Yükleniyor..." yazısını silip yerine rakamı basıyoruz
+                document.getElementById("toplam-yatirim-kutusu").innerText = maliyet + " ₺";
+
+                console.log("Bağlantı başarılı, gelen tüm veriler:", data);
+            } catch (error) {
+                console.error("API'ye bağlanılamadı! Motor (Uvicorn) açık mı?", error);
+                document.getElementById("toplam-yatirim-kutusu").innerText = "Bağlantı Hatası!";
+            }
+        }
+
+        // Sayfa açılır açılmaz fonksiyonu çalıştır
+        paneliGuncelle();
+    </script>
+
+</body>
+</html>

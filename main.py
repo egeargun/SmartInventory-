@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import pymysql
 import os
@@ -8,6 +9,15 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app = FastAPI()
+
+# --- YENİ: CORS AYARLARI (Kaan'ın Arayüzüne İzin Veriyoruz) ---
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # Geliştirme aşamasında her yerden gelen isteği kabul et
+    allow_credentials=True,
+    allow_methods=["*"], # GET, POST, PUT hepsine izin ver
+    allow_headers=["*"],
+)
 
 # --- VERİTABANI BAĞLANTI AYARLARI (.env'den çekiliyor) ---
 DB_HOST = os.getenv("DB_HOST")
