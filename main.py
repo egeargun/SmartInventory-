@@ -213,3 +213,75 @@ def dashboard_ozet():
         return {"hata": f"Dashboard verileri çekilemedi: {str(e)}"}
     finally:
         connection.close()
+
+        # --- 7. YENİ UÇ NOKTA: AKILLI ABC SINIFLANDIRMASI (GET) ---
+@app.get("/abc-analizi")
+def abc_analizi():
+    connection = get_db_connection()
+    try:
+        with connection.cursor() as cursor:
+            # 1. Bütün ürünleri toplam değerlerine göre büyükten küçüğe sıralayarak çek
+            cursor.execute("""
+                SELECT 
+                    product_id, 
+                    name, 
+                    current_stock, 
+                    unit_cost, 
+                    (current_stock * unit_cost) as toplam_deger 
+                FROM products 
+                WHERE current_stock > 0
+                ORDER BY toplam_deger DESC
+            """)
+            urunler = cursor.fetchall()
+
+            if not urunler:
+                return {"mesaj": "Depoda analiz edilecek ürün yok."}
+
+            # 2. Deponun genel toplam değerini hesapla (Yüzde bulmak için)
+            genel_toplam_deger = sum(urun["toplam_deger"] for urun in urunler)
+
+            # 3. ABC Sınıflandırması Algoritması
+            kumulatif_deger = 0
+            a_sinifi, b_sinifi, c_sinifi = [], [], []
+
+            for urun in urunler:
+                kumulatif_deger += urun["toplam_deger"]
+                yuzde = (kumulatif_deger / genel_toplam_deger) * 100
+
+                urun_verisi = {
+                    "id": urun["product_id"],
+                    "isim": urun["name"],
+                    "stok": urun["current_stock"],
+                    "toplam_deger": float(urun["toplam_deger"]),
+                    "sinif": ""
+                }
+
+                # Pareto Kuralı: %80 (A), %15 (B), %5 (C)
+                if yuzde <= 80:
+                    urun_verisi["sinif"] = "A"
+                    a_sinifi.append(urun_verisi)
+                elif yuzde <= 95:
+                    urun_verisi["sinif"] = "B"
+                    b_sinifi.append(urun_verisi)
+                else:
+                    urun_verisi["sinif"] = "C"
+                    c_sinifi.append(urun_verisi)
+
+            # JSON Olarak Kaan'a Fırlat
+            return {
+                "ozet": {
+                    "toplam_analiz_edilen_urun": len(urunler),
+                    "A_sinifi_urun_sayisi": len(a_sinifi),
+                    "B_sinifi_urun_sayisi": len(b_sinifi),
+                    "C_sinifi_urun_sayisi": len(c_sinifi)
+                },
+                "detaylar": {
+                    "A_Sinifi": a_sinifi,
+                    "B_Sinifi": b_sinifi,
+                    "C_Sinifi": c_sinifi
+                }
+            }
+    except Exception as e:
+        return {"hata": f"ABC Analizi yapılamadı: {str(e)}"}
+    finally:
+        connection.close()
