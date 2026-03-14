@@ -261,3 +261,37 @@ def satis_raporu():
         return {"hata": f"Satış raporu oluşturulamadı: {str(e)}"}
     finally:
         connection.close()
+
+        # --- 8. HOCANIN İSTEDİĞİ: KİM NE YAPTI (LOG) TAKİBİ (GET) ---
+@app.get("/islem-gecmisi")
+def islem_gecmisi():
+    connection = get_db_connection()
+    try:
+        with connection.cursor() as cursor:
+            # İşlem geçmişini, ürün adlarıyla eşleştirerek en yeninden en eskiye sırala
+            cursor.execute("""
+                SELECT 
+                    t.transaction_id, 
+                    p.name as urun_adi, 
+                    t.transaction_type, 
+                    t.quantity, 
+                    t.transaction_date,
+                    t.notes,
+                    t.processed_by
+                FROM inventory_transactions t
+                JOIN products p ON t.product_id = p.product_id
+                ORDER BY t.transaction_date DESC
+            """)
+            gecmis = cursor.fetchall()
+
+            if not gecmis:
+                return {"mesaj": "Sistemde henüz bir işlem kaydı bulunmuyor."}
+
+            return {
+                "toplam_islem_sayisi": len(gecmis),
+                "loglar": gecmis
+            }
+    except Exception as e:
+        return {"hata": f"İşlem geçmişi alınamadı: {str(e)}"}
+    finally:
+        connection.close()
