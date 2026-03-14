@@ -6,7 +6,7 @@ import os
 from typing import Optional
 from dotenv import load_dotenv
 from datetime import date, timedelta
-from schemas import StokGuncelleme, ProductCreate, StockTransaction
+from schemas import StokGuncelleme, ProductCreate, StockTransaction, TalepYaniti
 
 # .env dosyasındaki gizli şifreleri sisteme yükle
 load_dotenv()
@@ -258,5 +258,95 @@ def sevk_raporu():
             }
     except Exception as e:
         return {"hata": f"Sevk raporu oluşturulamadı: {str(e)}"}
+    finally:
+        connection.close()
+
+        # --- 3. STOK HAREKETİ KAYDET (VEYA TALEP OLUŞTUR) ---
+@app.post("/stok-hareketi")
+def stok_hareketi_kaydet(hareket: StockTransaction):
+    connection = get_db_connection()
+    try:
+        with connection.cursor() as cursor:
+            # 1. İşlemi (veya Talebi) veritabanına logla
+            sql_log = """
+            INSERT INTO inventory_transactions 
+            (product_id, quantity, transaction_type, notes, processed_by, status) 
+            VALUES (%s, %s, %s, %s, %s, %s)
+            """
+            cursor.execute(sql_log, (hareket.product_id, hareket.quantity, hareket.transaction_type, hareket.notes, hareket.processed_by, hareket.status.upper()))
+            
+            # 2. Zeka Devrede: EĞER İŞLEM "BEKLEMEDE" İSE STOĞU ELLEME! Sadece ONAYLANDI ise güncelle.
+            if hareket.status.upper() == "ONAYLANDI":
+                if hareket.transaction_type.upper() == "IN":
+                    sql_update = "UPDATE products SET current_stock = current_stock + %s WHERE product_id = %s"
+                else: 
+                    sql_update = "UPDATE products SET current_stock = current_stock - %s WHERE product_id = %s"
+                cursor.execute(sql_update, (hareket.quantity, hareket.product_id))
+            
+            connection.commit() 
+            
+            # Kaan'a doğru mesajı dönelim
+            if hareket.status.upper() == "BEKLEMEDE":
+                return {"mesaj": f"Talebiniz ({hareket.processed_by}) depo müdürü onayına gönderildi."}
+            return {"mesaj": f"İşlem {hareket.processed_by} tarafından doğrudan onaylanıp kaydedildi!"}
+    except Exception as e:
+        return {"hata": f"İşlem başarısız: {str(e)}"}
+    finally:
+        connection.close()
+
+        from schemas import TalepYaniti # Bunu dosyanın en üstündeki importların yanına eklemeyi unutma!
+
+# --- 9. BEKLEYEN TALEPLERİ GETİR (DEPO MÜDÜRÜ EKRANI) ---
+@app.get("/bekleyen-talepler")
+def bekleyen_talepler():
+    connection = get_db_connection()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT t.transaction_id, p.name as urun_adi, t.quantity, t.transaction_type, t.processed_by as talep_eden, t.transaction_date, t.notes
+                FROM inventory_transactions t
+                JOIN products p ON t.product_id = p.product_id
+                WHERE t.status = 'BEKLEMEDE'
+                ORDER BY t.transaction_date ASC
+            """)
+            talepler = cursor.fetchall()
+            
+            if not talepler:
+                return {"mesaj": "Harika! Bekleyen hiçbir sevk talebi yok."}
+            return {"bekleyen_talep_sayisi": len(talepler), "talepler": talepler}
+    finally:
+        connection.close()
+
+# --- 10. TALEBİ ONAYLA VEYA REDDET (İŞ AKIŞI MOTORU) ---
+@app.put("/talep-yanitla/{islem_id}")
+def talep_yanitla(islem_id: int, yanit: TalepYaniti):
+    connection = get_db_connection()
+    try:
+        with connection.cursor() as cursor:
+            # Önce talebin detaylarını bul (kaç adet, hangi ürün)
+            cursor.execute("SELECT product_id, quantity, transaction_type, status FROM inventory_transactions WHERE transaction_id = %s", (islem_id,))
+            talep = cursor.fetchone()
+
+            if not talep:
+                return {"hata": "Böyle bir işlem/talep bulunamadı."}
+            if talep["status"] != "BEKLEMEDE":
+                return {"hata": "Bu talep zaten yanıtlanmış!"}
+
+            # Durumu güncelle (ONAYLANDI veya İPTAL)
+            cursor.execute("UPDATE inventory_transactions SET status = %s, notes = CONCAT(notes, ' | Yanıtlayan: ', %s) WHERE transaction_id = %s", 
+                           (yanit.yeni_durum.upper(), yanit.yanitlayan_kisi, islem_id))
+
+            # Eğer Depo Müdürü ONAYLADIYSA, asıl stoğu ŞİMDİ düşür/artır
+            if yanit.yeni_durum.upper() == "ONAYLANDI":
+                if talep["transaction_type"].upper() == "IN":
+                    sql_update = "UPDATE products SET current_stock = current_stock + %s WHERE product_id = %s"
+                else:
+                    sql_update = "UPDATE products SET current_stock = current_stock - %s WHERE product_id = %s"
+                cursor.execute(sql_update, (talep["quantity"], talep["product_id"]))
+
+            connection.commit()
+            return {"mesaj": f"Talep başarıyla {yanit.yeni_durum} olarak güncellendi ve sistem işlendi."}
+    except Exception as e:
+        return {"hata": f"Talep yanıtlanırken hata oluştu: {str(e)}"}
     finally:
         connection.close()

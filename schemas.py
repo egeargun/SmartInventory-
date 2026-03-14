@@ -29,3 +29,18 @@ class StockTransaction(BaseModel):
     transaction_type: str # 'IN', 'OUT' veya 'ADJUST'
     notes: Optional[str] = None
     processed_by: str = "Admin"
+
+    # schemas.py dosyasındaki mevcut StockTransaction sınıfını bununla değiştir:
+class StockTransaction(BaseModel):
+    product_id: int
+    quantity: int
+    transaction_type: str # 'IN', 'OUT' veya 'ADJUST'
+    notes: Optional[str] = None
+    processed_by: str = "Admin"
+    # --- YENİ EKLENEN (İş Akışı İçin) ---
+    status: str = "ONAYLANDI" # Kaan Barista ekranından yollarken buraya "BEKLEMEDE" yazacak
+
+# En alta Depo Müdürünün talebi yanıtlarken kullanacağı yepyeni şablonu ekle:
+class TalepYaniti(BaseModel):
+    yeni_durum: str # 'ONAYLANDI' veya 'İPTAL'
+    yanitlayan_kisi: str = "Depo Müdürü"
