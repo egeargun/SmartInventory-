@@ -6,6 +6,7 @@ import os
 from typing import Optional
 from dotenv import load_dotenv
 from datetime import date, timedelta
+from schemas import StokGuncelleme, ProductCreate, StockTransaction
 
 # .env dosyasındaki gizli şifreleri sisteme yükle
 load_dotenv()
