@@ -214,85 +214,49 @@ def kritik_stok_uyarisi():
     finally:
         connection.close()
 
-        # --- 7. HOCANIN İSTEDİĞİ: SATIŞ TRENDİ VE GRAFİKLER (GET) ---
-@app.get("/satis-raporu")
-def satis_raporu():
+       # --- 7. DEPO ÇIKIŞ / SEVK TRENDİ VE GRAFİKLER (GET) ---
+@app.get("/sevk-raporu")
+def sevk_raporu():
     connection = get_db_connection()
     try:
         with connection.cursor() as cursor:
-            # 1. GRAFİK İÇİN: En Çok Satılan Ürünler (Pasta Grafiği - Ne ne kadar satıldı?)
-            # Sadece çıkış (OUT) işlemlerini baz alıyoruz
+            # 1. GRAFİK İÇİN: Kafeye En Çok Sevk Edilen Ürünler (Pasta Grafiği - Tüketim Analizi)
             cursor.execute("""
-                SELECT p.name, SUM(t.quantity) as toplam_satilan
+                SELECT p.name, SUM(t.quantity) as toplam_sevk
                 FROM inventory_transactions t
                 JOIN products p ON t.product_id = p.product_id
                 WHERE t.transaction_type = 'OUT'
                 GROUP BY p.product_id, p.name
-                ORDER BY toplam_satilan DESC
+                ORDER BY toplam_sevk DESC
                 LIMIT 5
             """)
-            en_cok_satilanlar = cursor.fetchall()
+            en_cok_sevk_edilenler = cursor.fetchall()
 
-            # 2. GRAFİK İÇİN: Günlük Satış Trendi (Çizgi Grafiği - Hangi gün ne kadar ürün çıktı?)
+            # 2. GRAFİK İÇİN: Günlük Depo Çıkış Trendi (Çizgi Grafiği - Lojistik Hareketliliği)
             cursor.execute("""
-                SELECT DATE(t.transaction_date) as tarih, SUM(t.quantity) as gunluk_satis_adeti
+                SELECT DATE(t.transaction_date) as tarih, SUM(t.quantity) as gunluk_cikis_adeti
                 FROM inventory_transactions t
                 WHERE t.transaction_type = 'OUT'
                 GROUP BY DATE(t.transaction_date)
                 ORDER BY tarih ASC
                 LIMIT 7
             """)
-            satis_trendi = cursor.fetchall()
+            sevk_trendi = cursor.fetchall()
 
-            # Eğer hiç satış yoksa boş dönmesin, uyarı versin
-            if not en_cok_satilanlar:
-                return {"mesaj": "Henüz hiç satış (OUT) işlemi yapılmamış. Grafikler için satış yapın."}
+            if not en_cok_sevk_edilenler:
+                return {"mesaj": "Henüz depodan kafeye hiç mal çıkışı (sevk) yapılmamış."}
 
             return {
                 "grafik_1_pasta": {
-                    "baslik": "En Çok Satılan 5 Ürün",
-                    "veriler": en_cok_satilanlar
+                    "baslik": "Kafeye En Çok Sevk Edilen 5 Ürün",
+                    "veriler": en_cok_sevk_edilenler
                 },
                 "grafik_2_cizgi": {
-                    "baslik": "Son 7 Günlük Satış Trendi",
-                    "veriler": satis_trendi
+                    "baslik": "Son 7 Günlük Depo Çıkış (Lojistik) Trendi",
+                    "veriler": sevk_trendi
                 }
             }
     except Exception as e:
-        return {"hata": f"Satış raporu oluşturulamadı: {str(e)}"}
-    finally:
-        connection.close()
-
-        # --- 8. HOCANIN İSTEDİĞİ: KİM NE YAPTI (LOG) TAKİBİ (GET) ---
-@app.get("/islem-gecmisi")
-def islem_gecmisi():
-    connection = get_db_connection()
-    try:
-        with connection.cursor() as cursor:
-            # İşlem geçmişini, ürün adlarıyla eşleştirerek en yeninden en eskiye sırala
-            cursor.execute("""
-                SELECT 
-                    t.transaction_id, 
-                    p.name as urun_adi, 
-                    t.transaction_type, 
-                    t.quantity, 
-                    t.transaction_date,
-                    t.notes,
-                    t.processed_by
-                FROM inventory_transactions t
-                JOIN products p ON t.product_id = p.product_id
-                ORDER BY t.transaction_date DESC
-            """)
-            gecmis = cursor.fetchall()
-
-            if not gecmis:
-                return {"mesaj": "Sistemde henüz bir işlem kaydı bulunmuyor."}
-
-            return {
-                "toplam_islem_sayisi": len(gecmis),
-                "loglar": gecmis
-            }
-    except Exception as e:
-        return {"hata": f"İşlem geçmişi alınamadı: {str(e)}"}
+        return {"hata": f"Sevk raporu oluşturulamadı: {str(e)}"}
     finally:
         connection.close()
