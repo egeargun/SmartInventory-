@@ -212,3 +212,52 @@ def kritik_stok_uyarisi():
             return {"acil_siparis_listesi": cursor.fetchall()}
     finally:
         connection.close()
+
+        # --- 7. HOCANIN İSTEDİĞİ: SATIŞ TRENDİ VE GRAFİKLER (GET) ---
+@app.get("/satis-raporu")
+def satis_raporu():
+    connection = get_db_connection()
+    try:
+        with connection.cursor() as cursor:
+            # 1. GRAFİK İÇİN: En Çok Satılan Ürünler (Pasta Grafiği - Ne ne kadar satıldı?)
+            # Sadece çıkış (OUT) işlemlerini baz alıyoruz
+            cursor.execute("""
+                SELECT p.name, SUM(t.quantity) as toplam_satilan
+                FROM inventory_transactions t
+                JOIN products p ON t.product_id = p.product_id
+                WHERE t.transaction_type = 'OUT'
+                GROUP BY p.product_id, p.name
+                ORDER BY toplam_satilan DESC
+                LIMIT 5
+            """)
+            en_cok_satilanlar = cursor.fetchall()
+
+            # 2. GRAFİK İÇİN: Günlük Satış Trendi (Çizgi Grafiği - Hangi gün ne kadar ürün çıktı?)
+            cursor.execute("""
+                SELECT DATE(t.transaction_date) as tarih, SUM(t.quantity) as gunluk_satis_adeti
+                FROM inventory_transactions t
+                WHERE t.transaction_type = 'OUT'
+                GROUP BY DATE(t.transaction_date)
+                ORDER BY tarih ASC
+                LIMIT 7
+            """)
+            satis_trendi = cursor.fetchall()
+
+            # Eğer hiç satış yoksa boş dönmesin, uyarı versin
+            if not en_cok_satilanlar:
+                return {"mesaj": "Henüz hiç satış (OUT) işlemi yapılmamış. Grafikler için satış yapın."}
+
+            return {
+                "grafik_1_pasta": {
+                    "baslik": "En Çok Satılan 5 Ürün",
+                    "veriler": en_cok_satilanlar
+                },
+                "grafik_2_cizgi": {
+                    "baslik": "Son 7 Günlük Satış Trendi",
+                    "veriler": satis_trendi
+                }
+            }
+    except Exception as e:
+        return {"hata": f"Satış raporu oluşturulamadı: {str(e)}"}
+    finally:
+        connection.close()
