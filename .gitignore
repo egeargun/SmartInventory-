@@ -1,2 +1,16 @@
 venv/
 .env
+__pycache__/
+*.pyc
+.DS_Store
+*.db
+*.log
+*.pdf
+.idea/
+.vscode/
+.gemini/
+alembic/
+DEPLOYMENT.md
+Dockerfile
+docker-compose.yml
+.dockerignore
