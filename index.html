@@ -1,1233 +1,2555 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="tr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Enterprise Akıllı Envanter / Smart Inventory V2</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap"
+      rel="stylesheet"
+    />
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- Barkod Okuyucu ve PDF Kütüphaneleri -->
-    <script src="https://unpkg.com/html5-qrcode"></script>
+    <!-- PDF Kütüphanesi -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-    
+
     <!-- PWA Meta Tags -->
-    <link rel="manifest" href="/manifest.json">
-    <meta name="theme-color" content="#0f172a">
-    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📦</text></svg>">
-    
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#0f172a" />
+    <link
+      rel="apple-touch-icon"
+      href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📦</text></svg>"
+    />
+
     <style>
-        :root {
-            --bg-color: #0f172a; --surface: rgba(30, 41, 59, 0.7); --border: rgba(255, 255, 255, 0.1);
-            --text-main: #f8fafc; --text-muted: #94a3b8;
-            --accent-green: #34d399; --accent-blue: #60a5fa; --accent-red: #fb7185; --accent-purple: #c084fc;
-            --sidebar-bg: rgba(30, 41, 59, 0.7);
-        }
-        
-        /* Light Mode Tokens */
-        body.light-mode {
-            --bg-color: #f1f5f9; --surface: #ffffff; --border: #e2e8f0;
-            --text-main: #1e293b; --text-muted: #64748b;
-            --sidebar-bg: #ffffff;
-        }
+      :root {
+        --bg-color: #0f172a;
+        --surface: rgba(30, 41, 59, 0.7);
+        --border: rgba(255, 255, 255, 0.1);
+        --text-main: #f8fafc;
+        --text-muted: #94a3b8;
+        --accent-green: #34d399;
+        --accent-blue: #60a5fa;
+        --accent-red: #fb7185;
+        --accent-purple: #c084fc;
+        --sidebar-bg: rgba(30, 41, 59, 0.7);
+      }
 
-        body.light-mode .retro-grid { opacity: 0.1; }
-        body.light-mode .nav-item { color: #64748b; }
-        body.light-mode .nav-item:hover, body.light-mode .nav-item.active { background: #f8fafc; color: #1e293b; }
-        body.light-mode .stat-card, body.light-mode .chart-container, body.light-mode .table-container { box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
-        body.light-mode .login-box { background: white; border-color: #e2e8f0; color: #1e293b; }
-        body {
-            margin: 0; font-family: 'Inter', sans-serif;
-            background-color: var(--bg-color); color: var(--text-main);
-            display: flex; min-height: 100vh; overflow-x: hidden;
-        }
-        
-        /* LOGIN EKRANI (JWT AUTH İÇİN ENTERPRISE KAPI) */
-        #loginOverlay {
-            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-            background: rgba(15, 23, 42, 0.95); z-index: 9999;
-            display: flex; flex-direction: column; justify-content: center; align-items: center;
-            backdrop-filter: blur(20px); transition: opacity 0.5s ease;
-        }
-        .login-box {
-            background: var(--surface); padding: 3rem; border-radius: 16px; border: 1px solid var(--border);
-            width: 320px; box-shadow: 0 20px 40px rgba(0,0,0,0.5); text-align: center;
-        }
-        .login-input {
-            width: 100%; padding: 12px; margin: 10px 0; border-radius: 8px; border: 1px solid var(--border);
-            background: rgba(255,255,255,0.05); color: white; outline: none; box-sizing: border-box; font-family:'Inter';
-        }
-        .login-btn {
-            width: 100%; padding: 12px; margin-top: 15px; border-radius: 8px; border: none;
-            background: var(--accent-blue); color: #000; font-weight: bold; cursor: pointer; transition: 0.2s;
-        }
-        .login-btn:hover { background: #3b82f6; color: white; }
+      /* Light Mode Tokens */
+      body.light-mode {
+        --bg-color: #f1f5f9;
+        --surface: #ffffff;
+        --border: #e2e8f0;
+        --text-main: #1e293b;
+        --text-muted: #64748b;
+        --sidebar-bg: #ffffff;
+      }
 
-        /* Sidebar & Genel Layout */
-        .sidebar { width: 250px; background: var(--surface); border-right: 1px solid var(--border); padding: 2rem 1rem; display: flex; flex-direction: column; gap: 2rem; flex-shrink: 0; }
-        .logo { font-size: 1.25rem; font-weight: 700; color: var(--accent-green); display: flex; align-items: center; gap: 5px; }
-        .nav-item { padding: 0.75rem 1rem; border-radius: 8px; cursor: pointer; color: var(--text-muted); font-weight: 600; transition: all 0.3s ease; }
-        .nav-item:hover, .nav-item.active { background: rgba(255,255,255,0.05); color: var(--text-main); transform: translateX(5px); }
-        .main { flex: 1; padding: 2rem 3rem; display: flex; flex-direction: column; gap: 2rem; height: 100vh; overflow-y: auto; box-sizing: border-box; }
-        .tab-content { display: none; flex-direction: column; gap: 2rem; animation: fadeIn 0.4s ease; }
-        .tab-content.active { display: flex; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        
-        /* Kartlar & Tablolar */
-        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.5rem; }
-        .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 1.5rem; position: relative; overflow: hidden; }
-        .stat-card::before { content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 4px; }
-        .card-green::before { background: var(--accent-green); } .card-red::before { background: var(--accent-red); }
-        .card-blue::before { background: var(--accent-blue); } .card-purple::before { background: var(--accent-purple); }
-        .stat-title { font-size: 0.875rem; color: var(--text-muted); text-transform: uppercase; margin-bottom: 0.5rem; }
-        .stat-value { font-size: 2rem; font-weight: 700; }
-        .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
-        .chart-container, .table-container { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 1.5rem; }
-        table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
-        th, td { text-align: left; padding: 1rem; border-bottom: 1px solid var(--border); }
-        th { color: var(--text-muted); font-weight: 600; } tr:hover { background: rgba(255,255,255,0.02); }
-        .badge { padding: 4px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: bold; }
-        .badge-IN { background: rgba(52, 211, 153, 0.2); color: #34d399; } .badge-OUT { background: rgba(251, 146, 60, 0.2); color: #fb923c; }
-        .btn { background: var(--accent-green); color: #000; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-weight: 600; }
-        .btn-red { background: var(--accent-red); color: white; }
-        
-        /* Toast Bildirim Merkezi */
-        #toastArea { position: fixed; bottom: 20px; right: 20px; z-index: 10000; display: flex; flex-direction: column; gap: 10px; pointer-events: none;}
-        .toast { background: var(--accent-red); color: white; padding: 15px 20px; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); font-weight: bold; animation: popIn 0.5s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards;}
-        @keyframes popIn { 0% { opacity: 0; transform: translateX(100%); } 100% { opacity: 1; transform: translateX(0); } }
+      body.light-mode .retro-grid {
+        opacity: 0.1;
+      }
+      body.light-mode .nav-item {
+        color: #64748b;
+      }
+      body.light-mode .nav-item:hover,
+      body.light-mode .nav-item.active {
+        background: #f8fafc;
+        color: #1e293b;
+      }
+      body.light-mode .stat-card,
+      body.light-mode .chart-container,
+      body.light-mode .table-container {
+        box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+      }
+      body.light-mode .login-box {
+        background: white;
+        border-color: #e2e8f0;
+        color: #1e293b;
+      }
+      body {
+        margin: 0;
+        font-family: "Inter", sans-serif;
+        background-color: var(--bg-color);
+        color: var(--text-main);
+        display: flex;
+        min-height: 100vh;
+        overflow-x: hidden;
+      }
 
-        /* Barkod Okuyucu */
-        #reader { width: 100%; max-width: 400px; margin: 0 auto; border-radius: 16px; overflow: hidden; border: 2px solid var(--accent-blue); }
+      /* LOGIN EKRANI (JWT AUTH İÇİN ENTERPRISE KAPI) */
+      #loginOverlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(15, 23, 42, 0.95);
+        z-index: 9999;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        backdrop-filter: blur(20px);
+        transition: opacity 0.5s ease;
+      }
+      .login-box {
+        background: var(--surface);
+        padding: 3rem;
+        border-radius: 16px;
+        border: 1px solid var(--border);
+        width: 320px;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+        text-align: center;
+      }
+      .login-input {
+        width: 100%;
+        padding: 12px;
+        margin: 10px 0;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.05);
+        color: white;
+        outline: none;
+        box-sizing: border-box;
+        font-family: "Inter";
+      }
+      .login-btn {
+        width: 100%;
+        padding: 12px;
+        margin-top: 15px;
+        border-radius: 8px;
+        border: none;
+        background: var(--accent-blue);
+        color: #000;
+        font-weight: bold;
+        cursor: pointer;
+        transition: 0.2s;
+      }
+      .login-btn:hover {
+        background: #3b82f6;
+        color: white;
+      }
 
-        /* --- MAGIC UI EFEKTLERI --- */
-        /* 1. Shimmer (Parlayan) Buton */
-        .btn-shimmer { position: relative; overflow: hidden; }
-        .btn-shimmer::before {
-            content: ''; position: absolute; top: 0; left: -100%; width: 50%; height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
-            transform: skewX(-20deg); animation: shimmer 3s infinite;
+      /* Sidebar & Genel Layout */
+      .sidebar {
+        width: 250px;
+        background: var(--surface);
+        border-right: 1px solid var(--border);
+        padding: 2rem 1rem;
+        display: flex;
+        flex-direction: column;
+        gap: 2rem;
+        flex-shrink: 0;
+      }
+      .logo {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: var(--accent-green);
+        display: flex;
+        align-items: center;
+        gap: 5px;
+      }
+      .nav-item {
+        padding: 0.75rem 1rem;
+        border-radius: 8px;
+        cursor: pointer;
+        color: var(--text-muted);
+        font-weight: 600;
+        transition: all 0.3s ease;
+      }
+      .nav-item:hover,
+      .nav-item.active {
+        background: rgba(255, 255, 255, 0.05);
+        color: var(--text-main);
+        transform: translateX(5px);
+      }
+      .main {
+        flex: 1;
+        padding: 2rem 3rem;
+        display: flex;
+        flex-direction: column;
+        gap: 2rem;
+        height: 100vh;
+        overflow-y: auto;
+        box-sizing: border-box;
+      }
+      .tab-content {
+        display: none;
+        flex-direction: column;
+        gap: 2rem;
+        animation: fadeIn 0.4s ease;
+      }
+      .tab-content.active {
+        display: flex;
+      }
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
         }
-        @keyframes shimmer { 0% { left: -100%; } 100% { left: 200%; } }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
 
-        /* 2. Retro Grid Background */
-        .retro-grid {
-            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: -1;
-            background-image: 
-                linear-gradient(to right, rgba(255,255,255,0.04) 1px, transparent 1px),
-                linear-gradient(to bottom, rgba(255,255,255,0.04) 1px, transparent 1px);
-            background-size: 50px 50px;
-            mask-image: linear-gradient(to bottom, black 40%, transparent 100%);
-            -webkit-mask-image: linear-gradient(to bottom, black 40%, transparent 100%);
-            animation: gridMove 15s linear infinite; pointer-events: none;
-        }
-        @keyframes gridMove { 0% { background-position: 0 0; } 100% { background-position: 50px 50px; } }
+      /* Kartlar & Tablolar */
+      .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 1.5rem;
+      }
+      .stat-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 1.5rem;
+        position: relative;
+        overflow: hidden;
+      }
+      .stat-card::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 4px;
+      }
+      .card-green::before {
+        background: var(--accent-green);
+      }
+      .card-red::before {
+        background: var(--accent-red);
+      }
+      .card-blue::before {
+        background: var(--accent-blue);
+      }
+      .card-purple::before {
+        background: var(--accent-purple);
+      }
+      .stat-title {
+        font-size: 0.875rem;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        margin-bottom: 0.5rem;
+      }
+      .stat-value {
+        font-size: 2rem;
+        font-weight: 700;
+      }
+      .charts-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1.5rem;
+      }
+      .chart-container,
+      .table-container {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 1.5rem;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 1rem;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 1rem;
+        border-bottom: 1px solid var(--border);
+      }
+      th {
+        color: var(--text-muted);
+        font-weight: 600;
+      }
+      tr:hover {
+        background: rgba(255, 255, 255, 0.02);
+      }
+      .badge {
+        padding: 4px 8px;
+        border-radius: 12px;
+        font-size: 0.75rem;
+        font-weight: bold;
+      }
+      .badge-IN {
+        background: rgba(52, 211, 153, 0.2);
+        color: #34d399;
+      }
+      .badge-OUT {
+        background: rgba(251, 146, 60, 0.2);
+        color: #fb923c;
+      }
+      .btn {
+        background: var(--accent-green);
+        color: #000;
+        border: none;
+        padding: 6px 12px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 600;
+      }
+      .btn-red {
+        background: var(--accent-red);
+        color: white;
+      }
 
-        /* 3. Meteors (Kayan Yıldızlar) */
-        .meteor {
-            position: absolute; width: 2px; height: 2px; background: #fff; border-radius: 50%;
-            box-shadow: 0 0 10px 2px rgba(255, 255, 255, 0.8); pointer-events: none;
-            animation: meteorFall linear infinite; opacity: 0; z-index:-1;
+      /* Toast Bildirim Merkezi */
+      #toastArea {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 10000;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        pointer-events: none;
+      }
+      .toast {
+        background: var(--accent-red);
+        color: white;
+        padding: 15px 20px;
+        border-radius: 8px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        font-weight: bold;
+        animation: popIn 0.5s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards;
+      }
+      @keyframes popIn {
+        0% {
+          opacity: 0;
+          transform: translateX(100%);
         }
-        .meteor::before {
-            content: ''; position: absolute; top: 50%; transform: translateY(-50%);
-            width: 100px; height: 1px; background: linear-gradient(90deg, rgba(255,255,255,1), transparent);
+        100% {
+          opacity: 1;
+          transform: translateX(0);
         }
-        @keyframes meteorFall {
-            0% { transform: rotate(215deg) translateX(0); opacity: 1; }
-            70% { opacity: 1; }
-            100% { transform: rotate(215deg) translateX(-1000px); opacity: 0; }
+      }
+
+      /* Barkod Okuyucu */
+      #reader {
+        width: 100%;
+        max-width: 400px;
+        margin: 0 auto;
+        border-radius: 16px;
+        overflow: hidden;
+        border: 2px solid var(--accent-blue);
+      }
+
+      /* --- MAGIC UI EFEKTLERI --- */
+      /* 1. Shimmer (Parlayan) Buton */
+      .btn-shimmer {
+        position: relative;
+        overflow: hidden;
+      }
+      .btn-shimmer::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 50%;
+        height: 100%;
+        background: linear-gradient(
+          90deg,
+          transparent,
+          rgba(255, 255, 255, 0.4),
+          transparent
+        );
+        transform: skewX(-20deg);
+        animation: shimmer 3s infinite;
+      }
+      @keyframes shimmer {
+        0% {
+          left: -100%;
         }
+        100% {
+          left: 200%;
+        }
+      }
+
+      /* 2. Retro Grid Background */
+      .retro-grid {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        z-index: -1;
+        background-image:
+          linear-gradient(
+            to right,
+            rgba(255, 255, 255, 0.04) 1px,
+            transparent 1px
+          ),
+          linear-gradient(
+            to bottom,
+            rgba(255, 255, 255, 0.04) 1px,
+            transparent 1px
+          );
+        background-size: 50px 50px;
+        mask-image: linear-gradient(to bottom, black 40%, transparent 100%);
+        -webkit-mask-image: linear-gradient(
+          to bottom,
+          black 40%,
+          transparent 100%
+        );
+        animation: gridMove 15s linear infinite;
+        pointer-events: none;
+      }
+      @keyframes gridMove {
+        0% {
+          background-position: 0 0;
+        }
+        100% {
+          background-position: 50px 50px;
+        }
+      }
+
+      /* 3. Meteors (Kayan Yıldızlar) */
+      .meteor {
+        position: absolute;
+        width: 2px;
+        height: 2px;
+        background: #fff;
+        border-radius: 50%;
+        box-shadow: 0 0 10px 2px rgba(255, 255, 255, 0.8);
+        pointer-events: none;
+        animation: meteorFall linear infinite;
+        opacity: 0;
+        z-index: -1;
+      }
+      .meteor::before {
+        content: "";
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 100px;
+        height: 1px;
+        background: linear-gradient(90deg, rgba(255, 255, 255, 1), transparent);
+      }
+      @keyframes meteorFall {
+        0% {
+          transform: rotate(215deg) translateX(0);
+          opacity: 1;
+        }
+        70% {
+          opacity: 1;
+        }
+        100% {
+          transform: rotate(215deg) translateX(-1000px);
+          opacity: 0;
+        }
+      }
     </style>
-</head>
-<body>
-    
+  </head>
+  <body>
     <!-- Magic UI Retro Grid Render -->
     <div class="retro-grid"></div>
 
     <!-- YENİ LOGIN & REGISTER EKRANI (Güvenlik) -->
     <div id="loginOverlay">
-        <div class="login-box" style="position:relative; width:380px;">
-            <div style="display:flex; margin-bottom:20px; border-bottom:1px solid var(--border);">
-                <div id="btnTabLogin" onclick="switchLoginTab('login')" style="flex:1; padding:10px; cursor:pointer; color:var(--accent-blue); border-bottom: 2px solid var(--accent-blue); font-weight:bold;">Giriş Yap</div>
-                <div id="btnTabRegister" onclick="switchLoginTab('register')" style="flex:1; padding:10px; cursor:pointer; color:var(--text-muted); font-weight:bold; transition: 0.2s;">Kayıt Ol</div>
-            </div>
-            
-            <div id="formLogin">
-                <h2 style="color: var(--accent-blue); margin-top:0;" data-tr="🛡️ Enterprise Oturum" data-en="🛡️ Enterprise Session">🛡️ Enterprise Oturum</h2>
-                <p style="color: var(--text-muted); font-size: 0.9rem;" data-tr="Sisteme finansal erişim için yetki doğrulaması gereklidir." data-en="Identity verification is required for financial access.">Sisteme finansal erişim için yetki doğrulaması gereklidir.</p>
-                <input type="text" id="username" class="login-input" placeholder="Kullanıcı Adı (Örn: admin)" value="admin">
-                <input type="password" id="password" class="login-input" placeholder="Parola (Varsayılan: 123)" value="123">
-                <button class="login-btn btn-shimmer" onclick="sistemeGirisYap()" data-tr="Yetkili Girişi Yap" data-en="Authorized Login">Yetkili Girişi Yap</button>
-                <p id="loginError" style="color: var(--accent-red); font-size: 0.8rem; display:none; margin-top: 10px;"></p>
-            </div>
-            
-            <div id="formRegister" style="display:none;">
-                <h2 style="color: #c084fc; margin-top:0;" data-tr="👤 Yeni Personel" data-en="👤 New Staff">👤 Yeni Personel</h2>
-                <p style="color: var(--text-muted); font-size: 0.9rem;" data-tr="Sistemde işlem yapabilmek için kendi hesabınızı oluşturun." data-en="Create your own account to operate in the system.">Sistemde işlem yapabilmek için kendi hesabınızı oluşturun.</p>
-                <input type="text" id="regUsername" class="login-input" placeholder="Yeni Kullanıcı Adınız">
-                <input type="password" id="regPassword" class="login-input" placeholder="Parola Belirleyiniz">
-                <select id="regRole" class="login-input" style="color:#fff; background:rgba(255,255,255,0.05); padding:12px; cursor:pointer;">
-                    <option value="Barista" style="color:#000">Mağaza Görevlisi (Barista)</option>
-                    <option value="Depo Müdürü" style="color:#000">Tedarik ve Depo Yöneticisi</option>
-                    <option value="Admin" style="color:#000">Sistem Lideri (Admin)</option>
-                </select>
-                <button class="login-btn" style="background:#c084fc;" onclick="sistemeKayitOl()">Kayıt Ol ve Kimlik Onaylat</button>
-                <p id="registerMsg" style="font-size: 0.8rem; margin-top:10px; font-weight:bold;"></p>
-            </div>
+      <div class="login-box" style="position: relative; width: 380px">
+        <div
+          style="
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 1px solid var(--border);
+          "
+        >
+          <div
+            id="btnTabLogin"
+            onclick="switchLoginTab('login')"
+            style="
+              flex: 1;
+              padding: 10px;
+              cursor: pointer;
+              color: var(--accent-blue);
+              border-bottom: 2px solid var(--accent-blue);
+              font-weight: bold;
+            "
+          >
+            Giriş Yap
+          </div>
+          <div
+            id="btnTabRegister"
+            onclick="switchLoginTab('register')"
+            style="
+              flex: 1;
+              padding: 10px;
+              cursor: pointer;
+              color: var(--text-muted);
+              font-weight: bold;
+              transition: 0.2s;
+            "
+          >
+            Kayıt Ol
+          </div>
         </div>
+
+        <div id="formLogin">
+          <h2
+            style="color: var(--accent-blue); margin-top: 0"
+            data-tr="🛡️ Enterprise Oturum"
+            data-en="🛡️ Enterprise Session"
+          >
+            🛡️ Enterprise Oturum
+          </h2>
+          <p
+            style="color: var(--text-muted); font-size: 0.9rem"
+            data-tr="Sisteme finansal erişim için yetki doğrulaması gereklidir."
+            data-en="Identity verification is required for financial access."
+          >
+            Sisteme finansal erişim için yetki doğrulaması gereklidir.
+          </p>
+          <input
+            type="text"
+            id="username"
+            class="login-input"
+            placeholder="Kullanıcı Adı (Örn: admin)"
+            value="admin"
+          />
+          <input
+            type="password"
+            id="password"
+            class="login-input"
+            placeholder="Parola (Varsayılan: 123)"
+            value="123"
+          />
+          <button
+            class="login-btn btn-shimmer"
+            onclick="sistemeGirisYap()"
+            data-tr="Yetkili Girişi Yap"
+            data-en="Authorized Login"
+          >
+            Yetkili Girişi Yap
+          </button>
+          <p
+            id="loginError"
+            style="
+              color: var(--accent-red);
+              font-size: 0.8rem;
+              display: none;
+              margin-top: 10px;
+            "
+          ></p>
+        </div>
+
+        <div id="formRegister" style="display: none">
+          <h2
+            style="color: #c084fc; margin-top: 0"
+            data-tr="👤 Yeni Personel"
+            data-en="👤 New Staff"
+          >
+            👤 Yeni Personel
+          </h2>
+          <p
+            style="color: var(--text-muted); font-size: 0.9rem"
+            data-tr="Sistemde işlem yapabilmek için kendi hesabınızı oluşturun."
+            data-en="Create your own account to operate in the system."
+          >
+            Sistemde işlem yapabilmek için kendi hesabınızı oluşturun.
+          </p>
+          <input
+            type="text"
+            id="regUsername"
+            class="login-input"
+            placeholder="Yeni Kullanıcı Adınız"
+          />
+          <input
+            type="password"
+            id="regPassword"
+            class="login-input"
+            placeholder="Parola Belirleyiniz"
+          />
+          <select
+            id="regRole"
+            class="login-input"
+            style="
+              color: #fff;
+              background: rgba(255, 255, 255, 0.05);
+              padding: 12px;
+              cursor: pointer;
+            "
+          >
+            <option value="Barista" style="color: #000">
+              Mağaza Görevlisi (Barista)
+            </option>
+            <option value="Depo Müdürü" style="color: #000">
+              Tedarik ve Depo Yöneticisi
+            </option>
+            <option value="Admin" style="color: #000">
+              Sistem Lideri (Admin)
+            </option>
+          </select>
+          <button
+            class="login-btn"
+            style="background: #c084fc"
+            onclick="sistemeKayitOl()"
+          >
+            Kayıt Ol ve Kimlik Onaylat
+          </button>
+          <p
+            id="registerMsg"
+            style="font-size: 0.8rem; margin-top: 10px; font-weight: bold"
+          ></p>
+        </div>
+      </div>
     </div>
 
     <!-- Canlı Bildirim Merkezi -->
     <div id="toastArea"></div>
 
     <div class="sidebar">
-        <div class="logo">🏛️ V2 Lojistik Sistemi</div>
-        <div class="nav-links">
-            <div id="nav-dashboard" class="nav-item active" onclick="tabDegistir('tab-dashboard', this)" data-tr="📊 Yönetim Özeti" data-en="📊 Dashboard">📊 Yönetim Özeti</div>
-            <div id="nav-depo" class="nav-item" onclick="tabDegistir('tab-depo', this)" data-tr="📦 Tam Depo Envanteri" data-en="📦 General Warehouse">📦 Ana Depo Envanteri</div>
-            <div id="nav-entegrasyon" class="nav-item" onclick="tabDegistir('tab-entegrasyon', this)" data-tr="🔗 POS Entegrasyonu" data-en="🔗 POS Integration" style="color:#60a5fa; font-weight:800; border: 1px solid rgba(96, 165, 250, 0.4);">🔗 POS Entegrasyon Ayarları</div>
-            <div id="nav-talepler" class="nav-item" onclick="tabDegistir('tab-talepler', this)" data-tr="✅ Onay Bekleyen İşlemler" data-en="✅ Pending Approvals">✅ Onay Bekleyen İşlemler</div>
-            <div id="nav-raporlar" class="nav-item" onclick="tabDegistir('tab-raporlar', this)" data-tr="📈 Kurumsal Raporlama" data-en="📈 Enterprise Reports">📈 Kurumsal Raporlama</div>
-            <div id="nav-ai-predictor" class="nav-item" onclick="tabDegistir('tab-ai-predictor', this)" data-tr="🧠 AI Talep Tahmincisi" data-en="🧠 AI Demand Predictor" style="color:#c084fc; font-weight:800; border: 1px solid rgba(192,132,252,0.4);">🧠 AI Talep Tahmincisi</div>
-            <div id="nav-audit" class="nav-item" onclick="tabDegistir('tab-audit', this)" data-tr="🔍 Denetim Günlüğü" data-en="🔍 Audit Trail">🔍 Denetim Günlüğü</div>
-            <div id="nav-barkod" class="nav-item" onclick="tabDegistir('tab-barkod', this)" data-tr="📷 Akıllı Barkod Tarayıcı" data-en="📷 Smart Barcode Scanner">📷 Akıllı Barkod Tarayıcı</div>
-            <div id="nav-kasa" class="nav-item" onclick="window.location.href='kasa.html'" style="color:var(--accent-green); font-weight:800; border: 1px solid rgba(16, 185, 129, 0.4); margin-top: 10px;" data-tr="🖥️ Kasa Ekranı (POS)" data-en="🖥️ POS Screen">🖥️ Kasa Ekranı (POS)</div>
+      <div class="logo">🏛️ V2 Lojistik Sistemi</div>
+      <div class="nav-links">
+        <div
+          id="nav-dashboard"
+          class="nav-item active"
+          onclick="tabDegistir('tab-dashboard', this)"
+          data-tr="📊 Yönetim Özeti"
+          data-en="📊 Dashboard"
+        >
+          📊 Yönetim Özeti
         </div>
-        <div style="margin-top: auto;">
-            <p style="font-size: 0.8rem; color: var(--text-muted);">Aktif Kullanıcı:<br><strong id="aktifKullanici" style="color:#fff;">Giriş Yapılmadı</strong></p>
-            <button class="btn btn-red" style="width:100%; background:transparent; border:1px solid #ef4444; color:#ef4444;" onclick="cikisYap()">Güvenli Çıkış Yap</button>
+        <div
+          id="nav-depo"
+          class="nav-item"
+          onclick="tabDegistir('tab-depo', this)"
+          data-tr="📦 Tam Depo Envanteri"
+          data-en="📦 General Warehouse"
+        >
+          📦 Ana Depo Envanteri
         </div>
+        <div
+          id="nav-talepler"
+          class="nav-item"
+          onclick="tabDegistir('tab-talepler', this)"
+          data-tr="✅ Onay Bekleyen İşlemler"
+          data-en="✅ Pending Approvals"
+        >
+          ✅ Onay Bekleyen İşlemler
+        </div>
+        <div
+          id="nav-raporlar"
+          class="nav-item"
+          onclick="tabDegistir('tab-raporlar', this)"
+          data-tr="📈 Kurumsal Raporlama"
+          data-en="📈 Enterprise Reports"
+        >
+          📈 Kurumsal Raporlama
+        </div>
+        <div
+          id="nav-stok-siparis"
+          class="nav-item"
+          onclick="tabDegistir('tab-stok-siparis', this)"
+          data-tr="📋 Stok Sipariş Yönetimi"
+          data-en="📋 Stock Order Management"
+        >
+          📋 Stok Sipariş Yönetimi
+        </div>
+        <div
+          id="nav-audit"
+          class="nav-item"
+          onclick="tabDegistir('tab-audit', this)"
+          data-tr="🔍 Denetim Günlüğü"
+          data-en="🔍 Audit Trail"
+        >
+          🔍 Denetim Günlüğü
+        </div>
+        <div
+          id="nav-pending-users"
+          class="nav-item"
+          onclick="tabDegistir('tab-pending-users', this)"
+          data-tr="👤 Bekleyen Kullanıcılar"
+          data-en="👤 Pending Users"
+        >
+          👤 Bekleyen Kullanıcılar
+        </div>
+      </div>
+      <div style="margin-top: auto">
+        <p style="font-size: 0.8rem; color: var(--text-muted)">
+          Aktif Kullanıcı:<br /><strong id="aktifKullanici" style="color: #fff"
+            >Giriş Yapılmadı</strong
+          >
+        </p>
+        <button
+          class="btn btn-red"
+          style="
+            width: 100%;
+            background: transparent;
+            border: 1px solid #ef4444;
+            color: #ef4444;
+          "
+          onclick="cikisYap()"
+        >
+          Güvenli Çıkış Yap
+        </button>
+      </div>
     </div>
 
     <div class="main">
-        <div class="header" style="display: flex; justify-content: space-between; align-items: center;">
-            <h2 id="sayfa-basligi">Yönetim Paneli</h2>
-            <div class="lang-toggle" style="display:flex; gap:10px; align-items:center;">
-                <!-- Tema Değiştirici -->
-                <button onclick="toggleTheme()" class="btn" style="background:transparent; border:1px solid var(--border); font-size:1.2rem; padding:4px 10px;" id="themeBtn">🌙</button>
-                
-                <div style="display:flex;">
-                    <button id="btn-tr" class="btn" style="border-radius: 4px 0 0 4px; border: 1px solid var(--border);" onclick="setLanguage('TR')">TR</button>
-                    <button id="btn-en" class="btn" style="background: transparent; color: var(--text-muted); border-radius: 0 4px 4px 0; border: 1px solid var(--border);" onclick="setLanguage('EN')">EN</button>
-                </div>
+      <div
+        class="header"
+        style="
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        "
+      >
+        <h2 id="sayfa-basligi">Yönetim Paneli</h2>
+        <div
+          class="lang-toggle"
+          style="display: flex; gap: 10px; align-items: center"
+        >
+          <!-- Tema Değiştirici -->
+          <button
+            onclick="toggleTheme()"
+            class="btn"
+            style="
+              background: transparent;
+              border: 1px solid var(--border);
+              font-size: 1.2rem;
+              padding: 4px 10px;
+            "
+            id="themeBtn"
+          >
+            🌙
+          </button>
+
+          <div style="display: flex">
+            <button
+              id="btn-tr"
+              class="btn"
+              style="
+                border-radius: 4px 0 0 4px;
+                border: 1px solid var(--border);
+              "
+              onclick="setLanguage('TR')"
+            >
+              TR
+            </button>
+            <button
+              id="btn-en"
+              class="btn"
+              style="
+                background: transparent;
+                color: var(--text-muted);
+                border-radius: 0 4px 4px 0;
+                border: 1px solid var(--border);
+              "
+              onclick="setLanguage('EN')"
+            >
+              EN
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 1. DASHBOARD -->
+      <div id="tab-dashboard" class="tab-content active">
+        <div class="stats-grid">
+          <div class="stat-card card-blue">
+            <div
+              class="stat-title"
+              data-tr="Aylık Fire Maliyeti"
+              data-en="Monthly Spoilage Cost"
+            >
+              Aylık Fire Zararı (LIFO)
             </div>
+            <div class="stat-value" id="fire-zarari" style="font-size: 1.4rem">
+              ...
+            </div>
+          </div>
+          <div class="stat-card card-red">
+            <div
+              class="stat-title"
+              data-tr="Kritik Stok Bildirimleri"
+              data-en="Critical Stock Alerts"
+            >
+              Kritik Hammadde Alarmı
+            </div>
+            <div class="stat-value" id="kritik-stok" style="font-size: 1.4rem">
+              ...
+            </div>
+          </div>
+        </div>
+        <div class="charts-grid">
+          <div class="chart-container">
+            <h3
+              style="margin-top: 0"
+              data-tr="Lojistik Çıkış Eğilimi (Son 7 Gün)"
+              data-en="Logistics Outflow Trend (Last 7 Days)"
+            >
+              Lojistik Çıkış Eğilimi (Son 7 Gün)
+            </h3>
+            <canvas id="lineChart" style="max-height: 250px"></canvas>
+          </div>
+          <div class="chart-container">
+            <h3
+              style="margin-top: 0"
+              data-tr="Tüketim Dağılımı (Kümülatif Kırılım)"
+              data-en="Consumption Distribution (Cumulative)"
+            >
+              Tüketim Dağılımı (Kümülatif Kırılım)
+            </h3>
+            <canvas id="pieChart" style="max-height: 250px"></canvas>
+          </div>
         </div>
 
-
-
-        <!-- 1. DASHBOARD -->
-        <div id="tab-dashboard" class="tab-content active">
-            <div class="stats-grid">
-                <div class="stat-card card-green" style="background: linear-gradient(135deg, rgba(52,211,153,0.15) 0%, rgba(52,211,153,0.4) 100%);">
-                    <div class="stat-title" data-tr="💰 Günlük Net Ciro (Z-Raporu)" data-en="💰 Daily Net Revenue (Z-Report)">💰 Günlük Net Ciro (Z-Raporu)</div>
-                    <div class="stat-value" id="gunluk-ciro">Yükleniyor...</div>
-                </div>
-                <div class="stat-card card-purple">
-                    <div class="stat-title" data-tr="🏆 Günün Yıldız Personeli (Barista)" data-en="🏆 Star Employee of the Day">🏆 Günün Yıldız Personeli (Barista)</div>
-                    <div class="stat-value" style="font-size:1.3rem; margin-top:10px; color:#c084fc" id="gunun-baristasi">Sistem Hesaplıyor...</div>
-                </div>
-                <div class="stat-card card-blue"><div class="stat-title" data-tr="Aylık Fire Maliyeti" data-en="Monthly Spoilage Cost">Aylık Fire Zararı (LIFO)</div><div class="stat-value" id="fire-zarari" style="font-size:1.4rem;">...</div></div>
-                <div class="stat-card card-red"><div class="stat-title" data-tr="Kritik Stok Bildirimleri" data-en="Critical Stock Alerts">Kritik Hammadde Alarmı</div><div class="stat-value" id="kritik-stok" style="font-size:1.4rem;">...</div></div>
-            </div>
-            <div class="charts-grid">
-                <div class="chart-container"><h3 style="margin-top:0" data-tr="Lojistik Çıkış Eğilimi (Son 7 Gün)" data-en="Logistics Outflow Trend (Last 7 Days)">Lojistik Çıkış Eğilimi (Son 7 Gün)</h3><canvas id="lineChart" style="max-height: 250px;"></canvas></div>
-                <div class="chart-container"><h3 style="margin-top:0" data-tr="Tüketim Dağılımı (Kümülatif Kırılım)" data-en="Consumption Distribution (Cumulative)">Tüketim Dağılımı (Kümülatif Kırılım)</h3><canvas id="pieChart" style="max-height: 250px;"></canvas></div>
-            </div>
-            
-            <!-- AI LOJİSTİK ASİSTANI EKLENTİSİ -->
-            <div style="display:flex; gap:15px; margin-top:15px;">
-                <button class="btn btn-shimmer" onclick="aiRaporOlustur()" style="flex:2; font-size: 1.1rem; border-radius:12px; padding:15px; background:linear-gradient(90deg, #c084fc, #60a5fa); color:#fff;" data-tr="🤖 AI Lojistik Raporatörü Başlat" data-en="🤖 Start AI Logistics Reporter">🤖 AI Lojistik Raporatörü Başlat</button>
-                <button class="btn" onclick="exportDashboardToPDF()" style="flex:1; border-radius:12px; background:var(--accent-red); color:white; font-weight:bold;" data-tr="📄 PDF Raporu İndir" data-en="📄 Download PDF Report">📄 PDF Raporu İndir</button>
-            </div>
-            
-            <div id="aiModal" style="display:none; padding:20px; margin-top:15px; border-radius:12px; border:2px solid #c084fc; background:rgba(192, 132, 252, 0.1); backdrop-filter: blur(10px);">
-              <h4 style="color:#c084fc; margin-top:0; font-size:1.2rem;" data-tr="🤖 Akıllı Lojistik Yorumu" data-en="🤖 Smart Logistics Insight">🤖 Akıllı Lojistik Yorumu</h4>
-              <p id="aiModalContent" style="color:var(--text-main); font-size:1rem; line-height:1.6;" data-tr="Analiz ediliyor..." data-en="Analyzing...">Analiz ediliyor...</p>
-            </div>
+        <!-- AI LOJİSTİK ASİSTANI EKLENTİSİ -->
+        <div style="display: flex; gap: 15px; margin-top: 15px">
+          <button
+            class="btn btn-shimmer"
+            onclick="aiRaporOlustur()"
+            style="
+              flex: 2;
+              font-size: 1.1rem;
+              border-radius: 12px;
+              padding: 15px;
+              background: linear-gradient(90deg, #c084fc, #60a5fa);
+              color: #fff;
+            "
+            data-tr="🤖 AI Lojistik Raporatörü Başlat"
+            data-en="🤖 Start AI Logistics Reporter"
+          >
+            🤖 AI Lojistik Raporatörü Başlat
+          </button>
+          <button
+            class="btn"
+            onclick="exportDashboardToPDF()"
+            style="
+              flex: 1;
+              border-radius: 12px;
+              background: var(--accent-red);
+              color: white;
+              font-weight: bold;
+            "
+            data-tr="📄 PDF Raporu İndir"
+            data-en="📄 Download PDF Report"
+          >
+            📄 PDF Raporu İndir
+          </button>
         </div>
 
-        <!-- YENI: KAPSAMLI TAM DEPO EKRANI -->
-        <div id="tab-depo" class="tab-content">
-            <div class="table-container">
-                <button class="btn" style="float:right; margin-bottom:10px; background:var(--accent-blue); color:#fff;" onclick="exportTableToCSV('depo-table', 'general_warehouse_inventory.csv')" data-tr="📥 Excel (CSV) İndir" data-en="📥 Download Excel (CSV)">📥 Excel (CSV) İndir</button>
-                <h3 style="margin-top:0;" data-tr="📦 Ana Depo Kaydı (Tüm Fiziksel Lojistik)" data-en="📦 Master Warehouse (Physical Logistics)">📦 Ana Depo Kaydı (Tüm Fiziksel Lojistik)</h3>
-                <p style="color: var(--text-muted); margin-top: 0;" data-tr="Şirketinizin sahip olduğu fiziki depolardaki tüm hammadde ve ürünleri listeler." data-en="Lists all raw materials and physical inventory owned by the company.">Şirketinizin sahip olduğu fiziki depolardaki tüm hammadde ve ürünleri listeler.</p>
-                <table style="font-size: 0.95rem;">
-                    <thead>
-                        <tr><th data-tr="Kod (SKU)" data-en="SKU Code">Kod (SKU)</th><th data-tr="Ürün Adı" data-en="Product Name">Ürün Adı</th><th data-tr="Mal Grubu" data-en="Category">Mal Grubu</th><th data-tr="Tedarikçi Şirket" data-en="Supplier">Tedarikçi Şirket</th><th data-tr="Fiziki Raf (Lokasyon)" data-en="Rack Location">Fiziki Raf (Lokasyon)</th><th data-tr="LIFO Hedef (SKT)" data-en="Expiration (LIFO)">LIFO Hedef (SKT)</th><th data-tr="Bakiye (Stok)" data-en="Current Stock">Bakiye (Stok)</th><th data-tr="Değer (Fiyat)" data-en="Unit Price">Değer (Fiyat)</th></tr>
-                    </thead>
-                    <tbody id="depo-table"><tr><td colspan="8" style="text-align:center" data-tr="Tüm envanteriniz çekiliyor..." data-en="Fetching all inventory...">Tüm envanteriniz çekiliyor...</td></tr></tbody>
-                </table>
+        <div
+          id="aiModal"
+          style="
+            display: none;
+            padding: 20px;
+            margin-top: 15px;
+            border-radius: 12px;
+            border: 2px solid #c084fc;
+            background: rgba(192, 132, 252, 0.1);
+            backdrop-filter: blur(10px);
+          "
+        >
+          <h4
+            style="color: #c084fc; margin-top: 0; font-size: 1.2rem"
+            data-tr="🤖 Akıllı Lojistik Yorumu"
+            data-en="🤖 Smart Logistics Insight"
+          >
+            🤖 Akıllı Lojistik Yorumu
+          </h4>
+          <p
+            id="aiModalContent"
+            style="color: var(--text-main); font-size: 1rem; line-height: 1.6"
+            data-tr="Analiz ediliyor..."
+            data-en="Analyzing..."
+          >
+            Analiz ediliyor...
+          </p>
+        </div>
+      </div>
+
+      <!-- YENI: KAPSAMLI TAM DEPO EKRANI -->
+      <div id="tab-depo" class="tab-content">
+        <div class="table-container">
+          <button
+            class="btn"
+            style="
+              float: right;
+              margin-bottom: 10px;
+              background: var(--accent-blue);
+              color: #fff;
+            "
+            onclick="
+              exportTableToCSV('depo-table', 'general_warehouse_inventory.csv')
+            "
+            data-tr="📥 Excel (CSV) İndir"
+            data-en="📥 Download Excel (CSV)"
+          >
+            📥 Excel (CSV) İndir
+          </button>
+          <h3
+            style="margin-top: 0"
+            data-tr="📦 Ana Depo Kaydı (Tüm Fiziksel Lojistik)"
+            data-en="📦 Master Warehouse (Physical Logistics)"
+          >
+            📦 Ana Depo Kaydı (Tüm Fiziksel Lojistik)
+          </h3>
+          <p
+            style="color: var(--text-muted); margin-top: 0"
+            data-tr="Şirketinizin sahip olduğu fiziki depolardaki tüm hammadde ve ürünleri listeler."
+            data-en="Lists all raw materials and physical inventory owned by the company."
+          >
+            Şirketinizin sahip olduğu fiziki depolardaki tüm hammadde ve
+            ürünleri listeler.
+          </p>
+          <table style="font-size: 0.95rem">
+            <thead>
+              <tr>
+                <th data-tr="Kod (SKU)" data-en="SKU Code">Kod (SKU)</th>
+                <th data-tr="Ürün Adı" data-en="Product Name">Ürün Adı</th>
+                <th data-tr="Mal Grubu" data-en="Category">Mal Grubu</th>
+                <th data-tr="Tedarikçi Şirket" data-en="Supplier">
+                  Tedarikçi Şirket
+                </th>
+                <th data-tr="Fiziki Raf (Lokasyon)" data-en="Rack Location">
+                  Fiziki Raf (Lokasyon)
+                </th>
+                <th data-tr="LIFO Hedef (SKT)" data-en="Expiration (LIFO)">
+                  LIFO Hedef (SKT)
+                </th>
+                <th data-tr="Bakiye (Stok)" data-en="Current Stock">
+                  Bakiye (Stok)
+                </th>
+                <th data-tr="Değer (Fiyat)" data-en="Unit Price">
+                  Değer (Fiyat)
+                </th>
+              </tr>
+            </thead>
+            <tbody id="depo-table">
+              <tr>
+                <td
+                  colspan="8"
+                  style="text-align: center"
+                  data-tr="Tüm envanteriniz çekiliyor..."
+                  data-en="Fetching all inventory..."
+                >
+                  Tüm envanteriniz çekiliyor...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 2. BEKLEYEN TALEPLER -->
+      <div id="tab-talepler" class="tab-content">
+        <div class="table-container">
+          <h3
+            style="margin-top: 0"
+            data-tr="⏳ Sevk Onay Paneli"
+            data-en="⏳ Shipment Approval Panel"
+          >
+            ⏳ Sevk Onay Paneli
+          </h3>
+          <p
+            style="color: var(--text-muted); margin-top: 0"
+            data-tr="Sistem üzerindeki mağaza operasyon talepleri yönetici onay makamına sunulmaktadır."
+            data-en="Store operation requests are submitted to executive approval."
+          >
+            Sistem üzerindeki mağaza operasyon talepleri yönetici onay makamına
+            sunulmaktadır.
+          </p>
+          <table>
+            <thead>
+              <tr>
+                <th data-tr="Tarih" data-en="Date">Tarih</th>
+                <th data-tr="Ürün Tanımı" data-en="Product Name">
+                  Ürün Tanımı
+                </th>
+                <th data-tr="İşlem Türü" data-en="Tx Type">İşlem Türü</th>
+                <th data-tr="Miktar" data-en="Quantity">Miktar</th>
+                <th data-tr="Talep Eden" data-en="Requested By">Talep Eden</th>
+                <th data-tr="Aksiyon Yönetimi" data-en="Actions">
+                  Aksiyon Yönetimi
+                </th>
+              </tr>
+            </thead>
+            <tbody id="talepler-table">
+              <tr>
+                <td colspan="6" style="text-align: center">
+                  Veriler yükleniyor...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 3. KURUMSAL RAPORLAR -->
+      <div id="tab-raporlar" class="tab-content">
+        <div class="charts-grid">
+          <div class="table-container" style="padding: 1.5rem">
+            <h3
+              style="margin-top: 0"
+              data-tr="📦 Tedarik Öneri Sistemi (Yönetici Onaylı)"
+              data-en="📦 Supply Order Proposals (Approve Only)"
+            >
+              📦 Tedarik Öneri Sistemi (Yönetici Onaylı)
+            </h3>
+            <div
+              style="
+                background: rgba(251, 191, 36, 0.1);
+                border: 1px dashed #fbbf24;
+                padding: 10px;
+                border-radius: 8px;
+                margin-bottom: 15px;
+                font-size: 0.85rem;
+                color: #fbbf24;
+              "
+            >
+              ⚠️ <b>OTOMATİK SİPARİŞ YOKTUR:</b> Güvenlik gereği tüm siparişler
+              yönetici onayı bekler. Listedeki ürünler kritik stok seviyesine
+              göre önerilmiştir.
             </div>
+            <div id="tedarikci-listesi">Sistem verileri yükleniyor...</div>
+          </div>
+
+          <!-- YENİ GERÇEK HAYAT AWS ENTEGRASYONU (SKT VE RAF YÖNETİMİ) -->
+          <div
+            class="table-container"
+            style="
+              padding: 1.5rem;
+              grid-column: 1 / -1;
+              border-color: rgba(251, 113, 133, 0.4);
+            "
+          >
+            <h3
+              style="margin-top: 0; color: var(--accent-red)"
+              data-tr="⚠️ SKT Paneli ve Raf Konumları"
+              data-en="⚠️ Expiration Dates & Rack Locations"
+            >
+              ⚠️ SKT Paneli ve Raf Konumları
+            </h3>
+            <p
+              style="color: var(--text-muted); font-size: 0.9rem"
+              data-tr="Sistem, Son Kullanma Tarihine 30 günden az kalmış ürünlerin depo lokasyonlarını ve arındırma rotalarını izler."
+              data-en="The system monitors warehouse locations and clearance routes for products with less than 30 days until expiration."
+            >
+              Sistem, Son Kullanma Tarihine 30 günden az kalmış ürünlerin depo
+              lokasyonlarını ve arındırma rotalarını izler.
+            </p>
+            <table>
+              <thead>
+                <tr>
+                  <th data-tr="Ürün Tanımı" data-en="Product">Ürün Tanımı</th>
+                  <th data-tr="Depo Raf (Lokasyon)" data-en="Rack Location">
+                    Depo Raf (Lokasyon)
+                  </th>
+                  <th data-tr="Mevcut Kutu" data-en="Current Boxes">
+                    Mevcut Kutu
+                  </th>
+                  <th data-tr="SKT Bitiş (Tarih)" data-en="Expiry Date">
+                    SKT Bitiş (Tarih)
+                  </th>
+                  <th data-tr="Kalan Süre" data-en="Time Left">Kalan Süre</th>
+                </tr>
+              </thead>
+              <tbody id="skt-table">
+                <tr>
+                  <td colspan="5" style="text-align: center">
+                    Ömrü bitmekte olan kritik ürün taraması yapılıyor...
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+
+      <!-- PENDING USERS (Admin Approval) -->
+      <div id="tab-pending-users" class="tab-content">
+        <div class="table-container">
+          <h3 style="margin-top: 0; color: var(--accent-blue)"
+              data-tr="👤 Onay Bekleyen Kullanıcılar"
+              data-en="👤 Users Awaiting Approval">
+            👤 Onay Bekleyen Kullanıcılar
+          </h3>
+          <p style="color: var(--text-muted); margin-top: 0"
+             data-tr="Yeni kayıt olan kullanıcılar burada onayınızı beklemektedir."
+             data-en="Newly registered users are awaiting your approval here.">
+            Yeni kayıt olan kullanıcılar burada onayınızı beklemektedir.
+          </p>
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th data-tr="Kullanıcı Adı" data-en="Username">Kullanıcı Adı</th>
+                <th data-tr="Rol" data-en="Role">Rol</th>
+                <th data-tr="İşlem" data-en="Action">İşlem</th>
+              </tr>
+            </thead>
+            <tbody id="pending-users-table">
+              <tr><td colspan="4" style="text-align:center">Yükleniyor...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- STOK SİPARİŞ YÖNETİMİ -->
+      <div id="tab-stok-siparis" class="tab-content">
+        <div class="table-container">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+            <h3 style="margin:0; color: var(--accent-blue)"
+                data-tr="📋 Stok Sipariş Yönetimi"
+                data-en="📋 Stock Order Management">
+              📋 Stok Sipariş Yönetimi
+            </h3>
+            <button class="btn btn-shimmer" onclick="stokSiparisFormAc(null)"
+                    data-tr="➕ Yeni Ürün Siparişi" data-en="➕ New Product Order">
+              ➕ Yeni Ürün Siparişi
+            </button>
+          </div>
+          <p style="color:var(--text-muted); margin-top:8px;"
+             data-tr="Ürün kalemlerini oluşturun, düzenleyin veya silin. Stok giriş/çıkış kayıtları aşağıdaki denetim günlüğünde tutulur."
+             data-en="Create, edit or delete product items. Stock in/out records are kept in the audit log below.">
+            Ürün kalemlerini oluşturun, düzenleyin veya silin. Stok giriş/çıkış kayıtları aşağıdaki denetim günlüğünde tutulur.
+          </p>
+          <table>
+            <thead>
+              <tr>
+                <th data-tr="Kod (SKU)" data-en="Code (SKU)">Kod (SKU)</th>
+                <th data-tr="Ürün Adı" data-en="Product Name">Ürün Adı</th>
+                <th data-tr="Mal Grubu" data-en="Category">Mal Grubu</th>
+                <th data-tr="Tedarikçi Şirket" data-en="Supplier">Tedarikçi Şirket</th>
+                <th data-tr="Fiziki Raf (Lokasyon)" data-en="Physical Shelf (Location)">Fiziki Raf</th>
+                <th data-tr="LIFO Hedef (SKT)" data-en="LIFO Target (Expiration)">LIFO Hedef (SKT)</th>
+                <th data-tr="Bakiye (Stok)" data-en="Balance (Stock)">Bakiye</th>
+                <th data-tr="Değer (Fiyat)" data-en="Value (Price)">Değer</th>
+                <th data-tr="İşlem" data-en="Action">İşlem</th>
+              </tr>
+            </thead>
+            <tbody id="stok-siparis-table">
+              <tr><td colspan="9" style="text-align:center">Yükleniyor...</td></tr>
+            </tbody>
+          </table>
         </div>
 
-        <!-- 2. BEKLEYEN TALEPLER -->
-        <div id="tab-talepler" class="tab-content">
-            <div class="table-container">
-                <h3 style="margin-top:0;" data-tr="⏳ Sevk Onay Paneli" data-en="⏳ Shipment Approval Panel">⏳ Sevk Onay Paneli</h3>
-                <p style="color: var(--text-muted); margin-top: 0;" data-tr="Sistem üzerindeki mağaza operasyon talepleri yönetici onay makamına sunulmaktadır." data-en="Store operation requests are submitted to executive approval.">Sistem üzerindeki mağaza operasyon talepleri yönetici onay makamına sunulmaktadır.</p>
-                <table>
-                    <thead>
-                        <tr><th data-tr="Tarih" data-en="Date">Tarih</th><th data-tr="Ürün Tanımı" data-en="Product Name">Ürün Tanımı</th><th data-tr="İşlem Türü" data-en="Tx Type">İşlem Türü</th><th data-tr="Miktar" data-en="Quantity">Miktar</th><th data-tr="Talep Eden" data-en="Requested By">Talep Eden</th><th data-tr="Aksiyon Yönetimi" data-en="Actions">Aksiyon Yönetimi</th></tr>
-                    </thead>
-                    <tbody id="talepler-table"><tr><td colspan="6" style="text-align:center">Veriler yükleniyor...</td></tr></tbody>
-                </table>
-            </div>
+        <div class="table-container" style="margin-top: 20px;">
+          <h3 style="margin-top:0; color: var(--accent-purple)"
+              data-tr="📝 Stok Hareket Günlüğü (Kim, Ne Yaptı)"
+              data-en="📝 Stock Movement Log (Who did what)">
+            📝 Stok Hareket Günlüğü
+          </h3>
+          <table>
+            <thead>
+              <tr>
+                <th data-tr="Tarih" data-en="Date">Tarih</th>
+                <th>SKU</th>
+                <th data-tr="Ürün" data-en="Product">Ürün</th>
+                <th data-tr="Tip" data-en="Type">Tip</th>
+                <th data-tr="Miktar" data-en="Qty">Miktar</th>
+                <th data-tr="İşlemi Yapan" data-en="Actor">İşlemi Yapan</th>
+                <th data-tr="Durum" data-en="Status">Durum</th>
+                <th data-tr="Not" data-en="Note">Not</th>
+              </tr>
+            </thead>
+            <tbody id="stok-log-table">
+              <tr><td colspan="8" style="text-align:center">Yükleniyor...</td></tr>
+            </tbody>
+          </table>
         </div>
 
-        <!-- 3. KURUMSAL RAPORLAR -->
-        <div id="tab-raporlar" class="tab-content">
-            <div class="charts-grid">
-                <div class="table-container" style="padding: 1.5rem;">
-                    <h3 style="margin-top:0;" data-tr="📦 Tedarik Öneri Sistemi (Yönetici Onaylı)" data-en="📦 Supply Order Proposals (Approve Only)">📦 Tedarik Öneri Sistemi (Yönetici Onaylı)</h3>
-                    <div style="background:rgba(251, 191, 36, 0.1); border: 1px dashed #fbbf24; padding: 10px; border-radius: 8px; margin-bottom: 15px; font-size: 0.85rem; color: #fbbf24;">
-                        ⚠️ <b>OTOMATİK SİPARİŞ YOKTUR:</b> Güvenlik gereği tüm siparişler yönetici onayı bekler. Listedeki ürünler kritik stok seviyesine göre önerilmiştir.
-                    </div>
-                    <div id="tedarikci-listesi">Sistem verileri yükleniyor...</div>
-                </div>
-
-                <!-- YENİ GERÇEK HAYAT AWS ENTEGRASYONU (SKT VE RAF YÖNETİMİ) -->
-                <div class="table-container" style="padding: 1.5rem; grid-column: 1 / -1; border-color: rgba(251, 113, 133, 0.4);">
-                    <h3 style="margin-top:0; color: var(--accent-red);" data-tr="⚠️ SKT Paneli ve Raf Konumları" data-en="⚠️ Expiration Dates & Rack Locations">⚠️ SKT Paneli ve Raf Konumları</h3>
-                    <p style="color:var(--text-muted); font-size: 0.9rem;" data-tr="Sistem, Son Kullanma Tarihine 30 günden az kalmış ürünlerin depo lokasyonlarını ve arındırma rotalarını izler." data-en="The system monitors warehouse locations and clearance routes for products with less than 30 days until expiration.">Sistem, Son Kullanma Tarihine 30 günden az kalmış ürünlerin depo lokasyonlarını ve arındırma rotalarını izler.</p>
-                    <table>
-                        <thead>
-                            <tr><th data-tr="Ürün Tanımı" data-en="Product">Ürün Tanımı</th><th data-tr="Depo Raf (Lokasyon)" data-en="Rack Location">Depo Raf (Lokasyon)</th><th data-tr="Mevcut Kutu" data-en="Current Boxes">Mevcut Kutu</th><th data-tr="SKT Bitiş (Tarih)" data-en="Expiry Date">SKT Bitiş (Tarih)</th><th data-tr="Kalan Süre" data-en="Time Left">Kalan Süre</th></tr>
-                        </thead>
-                        <tbody id="skt-table"><tr><td colspan="5" style="text-align:center">Ömrü bitmekte olan kritik ürün taraması yapılıyor...</td></tr></tbody>
-                    </table>
-                </div>
+        <!-- Modal Form -->
+        <div id="stok-siparis-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:9999; align-items:center; justify-content:center;">
+          <div style="background:var(--bg-panel, #1a1f2e); padding:25px; border-radius:14px; width:95%; max-width:560px; border:1px solid var(--border); max-height:90vh; overflow-y:auto;">
+            <h3 id="stok-siparis-modal-baslik" style="margin-top:0;" data-tr="Yeni Ürün" data-en="New Product">Yeni Ürün</h3>
+            <input type="hidden" id="ss-product-id" />
+            <style>
+              .ss-field { display:flex; flex-direction:column; gap:4px; }
+              .ss-field label { font-size:0.8rem; color:var(--text-muted); font-weight:600; text-align:left; }
+            </style>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+              <div class="ss-field"><label for="ss-sku" data-tr="Kod (SKU)" data-en="Code (SKU)">Kod (SKU)</label>
+                <input class="login-input" id="ss-sku" list="dl-sku" onchange="_ssSkuAutofill()" />
+                <datalist id="dl-sku"></datalist></div>
+              <div class="ss-field"><label for="ss-warehouse" data-tr="Fiziki Raf (Lokasyon)" data-en="Physical Shelf (Location)">Fiziki Raf (Lokasyon)</label>
+                <input class="login-input" id="ss-warehouse" list="dl-warehouse" />
+                <datalist id="dl-warehouse"></datalist></div>
+              <div class="ss-field"><label for="ss-name-tr" data-tr="Ürün Adı" data-en="Product Name">Ürün Adı</label>
+                <input class="login-input" id="ss-name-tr" list="dl-name-tr" />
+                <datalist id="dl-name-tr"></datalist></div>
+              <div class="ss-field"><label for="ss-name-en" data-tr="Ürün Adı (Alternatif Dil)" data-en="Product Name (Alt. Language)">Ürün Adı (Alternatif Dil)</label>
+                <input class="login-input" id="ss-name-en" list="dl-name-en" />
+                <datalist id="dl-name-en"></datalist></div>
+              <div class="ss-field"><label for="ss-category-id" data-tr="Mal Grubu" data-en="Category">Mal Grubu</label>
+                <select class="login-input" id="ss-category-id"></select></div>
+              <div class="ss-field"><label for="ss-supplier-id" data-tr="Tedarikçi Şirket" data-en="Supplier">Tedarikçi Şirket</label>
+                <select class="login-input" id="ss-supplier-id"></select></div>
+              <div class="ss-field"><label for="ss-unit-cost" data-tr="Birim Maliyet" data-en="Unit Cost">Birim Maliyet</label>
+                <input class="login-input" id="ss-unit-cost" type="number" step="0.01" /></div>
+              <div class="ss-field"><label for="ss-unit-price" data-tr="Değer (Birim Fiyat)" data-en="Value (Unit Price)">Değer (Birim Fiyat)</label>
+                <input class="login-input" id="ss-unit-price" type="number" step="0.01" /></div>
+              <div class="ss-field"><label for="ss-current-stock" data-tr="Bakiye (Stok)" data-en="Balance (Stock)">Bakiye (Stok)</label>
+                <input class="login-input" id="ss-current-stock" type="number" /></div>
+              <div class="ss-field"><label for="ss-reorder-point" data-tr="Yeniden Sipariş Noktası" data-en="Reorder Point">Yeniden Sipariş Noktası</label>
+                <input class="login-input" id="ss-reorder-point" type="number" /></div>
+              <div class="ss-field"><label for="ss-expiration" data-tr="LIFO Hedef (SKT)" data-en="LIFO Target (Expiration)">LIFO Hedef (SKT)</label>
+                <input class="login-input" id="ss-expiration" type="date" /></div>
+              <div class="ss-field"><label for="ss-abc" data-tr="ABC Sınıfı" data-en="ABC Class">ABC Sınıfı</label>
+                <input class="login-input" id="ss-abc" value="C" /></div>
             </div>
-        </div>
-
-        <!-- YENİ: POS ENTEGRASYON VE API KEY AYARLARI -->
-        <div id="tab-entegrasyon" class="tab-content">
-            <div class="table-container">
-                <h3 style="margin-top:0; color:var(--accent-blue)" data-tr="🔗 API Token Yöneticisi (M2M İletişim)" data-en="🔗 API Token Manager (M2M Auth)">🔗 API Token Yöneticisi (M2M İletişim)</h3>
-                <p style="color: var(--text-muted); margin-top: 0;" data-tr="3. Parti sistemlerin (Adisyo, Denge vb.) stoklarımızı anında webhook üzerinden düşebilmesi için bağlantı şifreleri buradan oluşturulur." data-en="Generate access tokens here for 3rd party POS systems (like Adisyo, Denge) to trigger immediate stock reductions via webhooks.">3. Parti sistemlerin (Adisyo, Denge vb.) stoklarımızı anında webhook üzerinden düşebilmesi için bağlantı şifreleri buradan oluşturulur.</p>
-                
-                <div style="background:rgba(255,255,255,0.05); padding:20px; border-radius:12px; margin-top:15px; border:1px solid var(--accent-blue);">
-                    <h4 data-tr="Yeni API Key Üret" data-en="Generate New API Key">Yeni API Key Üret</h4>
-                    <input type="text" id="api-provider-name" class="login-input" placeholder="Servis Sağlayıcı Adı (Örn: Adisyo-Kadikoy)" style="max-width:300px;">
-                    <button class="btn btn-shimmer" onclick="apiKeyiUret()" style="margin-left:10px;" data-tr="Token Oluştur" data-en="Create Token">Token Oluştur</button>
-                    <div id="yeni-api-key-sonuc" style="margin-top:15px; color:var(--accent-green); font-family:monospace; font-size:0.9rem; font-weight:bold; word-break:break-all;"></div>
-                </div>
-
-                <h4 style="margin-top:30px;" data-tr="Mevcut API Bağlantıları" data-en="Existing API Connections">Mevcut API Bağlantıları</h4>
-                <table>
-                    <thead>
-                        <tr><th data-tr="ID" data-en="ID">ID</th><th data-tr="Bağlantı Sağlayıcı" data-en="Connection Provider">Bağlantı Sağlayıcı</th><th data-tr="Oluşturulma Tarihi" data-en="Creation Date">Oluşturulma Tarihi</th></tr>
-                    </thead>
-                    <tbody id="api-keys-table"><tr><td colspan="3" style="text-align:center" data-tr="Veriler çekiliyor..." data-en="Fetching data...">Veriler çekiliyor...</td></tr></tbody>
-                </table>
+            <div style="display:flex; gap:10px; margin-top:15px; justify-content:flex-end;">
+              <button class="btn" onclick="stokSiparisFormKapat()" style="background:transparent; border:1px solid var(--border);" data-tr="İptal" data-en="Cancel">İptal</button>
+              <button class="btn btn-shimmer" onclick="stokSiparisKaydet()" data-tr="Kaydet" data-en="Save">Kaydet</button>
             </div>
+          </div>
         </div>
+      </div>
 
-        <!-- 4. BARKOD GÖRÜNTÜ TARAYICI -->
-        <div id="tab-barkod" class="tab-content">
-            <div class="table-container" style="text-align:center;">
-                <h3 style="margin-top:0; color:var(--accent-blue)" data-tr="📷 IoT Lojistik: Optik Barkod Tarayıcı" data-en="📷 IoT Logistics: Optical Barcode Scanner">📷 IoT Lojistik: Optik Barkod Tarayıcı</h3>
-                <p style="color: var(--text-muted);" data-tr="Lütfen bilgisayarınızın web kamerasını açın ve ürün barkodunu gösteriniz." data-en="Please open your webcam and point it at the product's barcode.">Lütfen bilgisayarınızın web kamerasını açın ve ürün barkodunu gösteriniz.</p>
-                <div id="reader"></div>
-                <button class="btn" style="margin-top: 15px;" id="startScanBtn" onclick="kamerayiAc()" data-tr="Tarayıcıyı (Kamerayı) Başlat" data-en="Start Scanner (Camera)">Tarayıcıyı (Kamerayı) Başlat</button>
-                <div id="scanResult" style="margin-top:15px; font-weight:bold; color:var(--accent-green)"></div>
-            </div>
+      <!-- 6. AUDIT TRAIL (GÜVENLİK DENETİM KAYDEDICİSİ) -->
+      <div id="tab-audit" class="tab-content">
+        <div class="table-container">
+          <button
+            class="btn"
+            style="
+              float: right;
+              margin-bottom: 10px;
+              background: var(--accent-purple);
+              color: #fff;
+            "
+            onclick="exportTableToCSV('audit-table', 'audit_trail.csv')"
+            data-tr="📥 Audit Log CSV"
+            data-en="📥 Download Audit Log"
+          >
+            📥 Audit Log CSV
+          </button>
+          <h3
+            style="margin-top: 0; color: var(--accent-purple)"
+            data-tr="🔍 Güvenlik Denetim Günlüğü (Tam İz)"
+            data-en="🔍 Security Audit Trail (Full Trace)"
+          >
+            🔍 Güvenlik Denetim Günlüğü
+          </h3>
+          <p
+            style="color: var(--text-muted); margin-top: 0"
+            data-tr="Sistemde gerçekleştirilen her kritik işlemi, kullanıcı bazında zaman damgalı olarak kaydeder. ISO 27001 uyumlu güvenlik günlüğü."
+            data-en="Every critical action is timestamped and logged by user. ISO 27001-compliant security trail."
+          >
+            Sistemde gerçekleştirilen her kritik işlem, kullanıcı bazında zaman
+            damgalı olarak kaydedilir.
+          </p>
+          <table id="audit-table" style="font-size: 0.85rem">
+            <thead>
+              <tr>
+                <th data-tr="#" data-en="#">#</th>
+                <th data-tr="Zaman Damgası" data-en="Timestamp">
+                  Zaman Damgası
+                </th>
+                <th data-tr="Kullanıcı" data-en="Actor">Kullanıcı</th>
+                <th data-tr="Rol" data-en="Role">Rol</th>
+                <th data-tr="İşlem Kodu" data-en="Action">İşlem Kodu</th>
+                <th data-tr="Hedef Kaynak" data-en="Resource">Hedef Kaynak</th>
+                <th data-tr="Detay" data-en="Detail">Detay</th>
+              </tr>
+            </thead>
+            <tbody id="audit-tbody">
+              <tr>
+                <td
+                  colspan="7"
+                  style="text-align: center; color: var(--text-muted)"
+                >
+                  Kayıtlar yükleniyor...
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
-
-        <!-- 5. AI PREDICTOR DASHBOARD -->
-        <div id="tab-ai-predictor" class="tab-content">
-            <div class="table-container">
-                <h3 style="margin-top:0; color:#c084fc;" data-tr="🧠 AI Talep Tahmin Merkezi (Lineer Regresyon Motoru)" data-en="🧠 AI Demand Prediction Hub (Linear Regression Engine)">🧠 AI Talep Tahmin Merkezi</h3>
-                <p style="color:var(--text-muted); margin-top:0;" data-tr="Son 7 günlük gerçek trendlerden M2 türetilmiş lineer projeksiyon algoritması ile gelecek 7 günün en yüksek hacimli ürünleri tahmin edilmektedir." data-en="Using M2-derived linear regression from the last 7 days of real trends to project demand for the highest-volume products over the next 7 days.">Son 7 günlük gerçek trendlerden gelecek 7 günün talebi tahmin ediliyor.</p>
-                <div id="ai-predictor-grid" style="display:flex; flex-direction:column; gap:2rem; margin-top:1rem;">
-                    <div style="text-align:center; color:var(--text-muted); padding:2rem;" data-tr="🧠 Yapay Zeka Modeli hesaplanıyor..." data-en="🧠 Running AI model...">🧠 Yapay Zeka Modeli hesaplanıyor...</div>
-                </div>
-            </div>
-        </div>
-
-
-
-        <!-- 6. AUDIT TRAIL (GÜVENLİK DENETİM KAYDEDICİSİ) -->
-        <div id="tab-audit" class="tab-content">
-            <div class="table-container">
-                <button class="btn" style="float:right; margin-bottom:10px; background:var(--accent-purple); color:#fff;" onclick="exportTableToCSV('audit-table', 'audit_trail.csv')" data-tr="📥 Audit Log CSV" data-en="📥 Download Audit Log">📥 Audit Log CSV</button>
-                <h3 style="margin-top:0; color:var(--accent-purple);" data-tr="🔍 Güvenlik Denetim Günlüğü (Tam İz)" data-en="🔍 Security Audit Trail (Full Trace)">🔍 Güvenlik Denetim Günlüğü</h3>
-                <p style="color:var(--text-muted); margin-top:0;" data-tr="Sistemde gerçekleştirilen her kritik işlemi, kullanıcı bazında zaman damgalı olarak kaydeder. ISO 27001 uyumlu güvenlik günlüğü." data-en="Every critical action is timestamped and logged by user. ISO 27001-compliant security trail.">Sistemde gerçekleştirilen her kritik işlem, kullanıcı bazında zaman damgalı olarak kaydedilir.</p>
-                <table id="audit-table" style="font-size:0.85rem;">
-                    <thead>
-                        <tr>
-                            <th data-tr="#" data-en="#">#</th>
-                            <th data-tr="Zaman Damgası" data-en="Timestamp">Zaman Damgası</th>
-                            <th data-tr="Kullanıcı" data-en="Actor">Kullanıcı</th>
-                            <th data-tr="Rol" data-en="Role">Rol</th>
-                            <th data-tr="İşlem Kodu" data-en="Action">İşlem Kodu</th>
-                            <th data-tr="Hedef Kaynak" data-en="Resource">Hedef Kaynak</th>
-                            <th data-tr="Detay" data-en="Detail">Detay</th>
-                        </tr>
-                    </thead>
-                    <tbody id="audit-tbody">
-                        <tr><td colspan="7" style="text-align:center; color:var(--text-muted);">Kayıtlar yükleniyor...</td></tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
+      </div>
     </div>
 
     <!-- JWT, API ve MagicUI İşleyiş Js -->
     <script>
-        // --- 0. KAYIT VE LOGIN TAB GEÇİŞLERİ ---
-        function switchLoginTab(tab) {
-            document.getElementById("formLogin").style.display = tab === 'login' ? 'block' : 'none';
-            document.getElementById("formRegister").style.display = tab === 'register' ? 'block' : 'none';
-            document.getElementById("btnTabLogin").style.color = tab === 'login' ? 'var(--accent-blue)' : 'var(--text-muted)';
-            document.getElementById("btnTabLogin").style.borderBottom = tab === 'login' ? '2px solid var(--accent-blue)' : 'none';
-            document.getElementById("btnTabRegister").style.color = tab === 'register' ? '#c084fc' : 'var(--text-muted)';
-            document.getElementById("btnTabRegister").style.borderBottom = tab === 'register' ? '2px solid #c084fc' : 'none';
-        }
-        
-        async function sistemeKayitOl() {
-            const user = document.getElementById("regUsername").value;
-            const pass = document.getElementById("regPassword").value;
-            const rol = document.getElementById("regRole").value;
-            const msgEl = document.getElementById("registerMsg");
-            if(!user || !pass) { msgEl.style.color = "var(--accent-red)"; msgEl.innerText = "Alanlar Boş Olamaz!"; return; }
-            
-            try {
-                const res = await fetch(window.location.origin + "/register", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({username: user, password: pass, role: rol})
-                });
-                const data = await res.json();
-                if(data.mesaj) {
-                    msgEl.style.color = "var(--accent-green)";
-                    msgEl.innerText = data.mesaj;
-                    setTimeout(() => { 
-                        switchLoginTab('login'); 
-                        document.getElementById("username").value = user; 
-                        document.getElementById("password").value = pass; 
-                        msgEl.innerText=""; 
-                    }, 2500);
-                } else {
-                    msgEl.style.color = "var(--accent-red)";
-                    msgEl.innerText = data.hata || "Sistem Hatası";
-                }
-            } catch(e) {
-                msgEl.style.color = "var(--accent-red)"; msgEl.innerText = "Sunucu Bulunamadı!";
-            }
+      // --- 0. KAYIT VE LOGIN TAB GEÇİŞLERİ ---
+      function switchLoginTab(tab) {
+        document.getElementById("formLogin").style.display =
+          tab === "login" ? "block" : "none";
+        document.getElementById("formRegister").style.display =
+          tab === "register" ? "block" : "none";
+        document.getElementById("btnTabLogin").style.color =
+          tab === "login" ? "var(--accent-blue)" : "var(--text-muted)";
+        document.getElementById("btnTabLogin").style.borderBottom =
+          tab === "login" ? "2px solid var(--accent-blue)" : "none";
+        document.getElementById("btnTabRegister").style.color =
+          tab === "register" ? "#c084fc" : "var(--text-muted)";
+        document.getElementById("btnTabRegister").style.borderBottom =
+          tab === "register" ? "2px solid #c084fc" : "none";
+      }
+
+      async function sistemeKayitOl() {
+        const user = document.getElementById("regUsername").value;
+        const pass = document.getElementById("regPassword").value;
+        const rol = document.getElementById("regRole").value;
+        const msgEl = document.getElementById("registerMsg");
+        if (!user || !pass) {
+          msgEl.style.color = "var(--accent-red)";
+          msgEl.innerText = "Alanlar Boş Olamaz!";
+          return;
         }
 
-        // --- 1. MAGIC UI METEOR (YILDIZLAR) YARATICISI ---
-        function generateMeteors() {
-            const container = document.getElementById("loginOverlay");
-            if(!container) return;
-            for(let i=0; i<25; i++) {
-                let m = document.createElement("div"); m.className = "meteor";
-                m.style.left = Math.floor(Math.random() * window.innerWidth) + "px";
-                m.style.top = Math.floor(Math.random() * (window.innerHeight)) + "px";
-                m.style.animationDuration = (Math.random() * 2 + 3) + "s";
-                m.style.animationDelay = (Math.random() * 3) + "s";
-                container.appendChild(m);
-            }
+        try {
+          const res = await fetch(window.location.origin + "/register", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username: user, password: pass, role: rol }),
+          });
+          const data = await res.json();
+          if (data.mesaj) {
+            msgEl.style.color = "var(--accent-green)";
+            msgEl.innerText = data.mesaj;
+            setTimeout(() => {
+              switchLoginTab("login");
+              document.getElementById("username").value = user;
+              document.getElementById("password").value = pass;
+              msgEl.innerText = "";
+            }, 2500);
+          } else {
+            msgEl.style.color = "var(--accent-red)";
+            msgEl.innerText = data.hata || "Sistem Hatası";
+          }
+        } catch (e) {
+          msgEl.style.color = "var(--accent-red)";
+          msgEl.innerText = "Sunucu Bulunamadı!";
+        }
+      }
+
+      // --- 1. MAGIC UI METEOR (YILDIZLAR) YARATICISI ---
+      function generateMeteors() {
+        const container = document.getElementById("loginOverlay");
+        if (!container) return;
+        for (let i = 0; i < 25; i++) {
+          let m = document.createElement("div");
+          m.className = "meteor";
+          m.style.left = Math.floor(Math.random() * window.innerWidth) + "px";
+          m.style.top = Math.floor(Math.random() * window.innerHeight) + "px";
+          m.style.animationDuration = Math.random() * 2 + 3 + "s";
+          m.style.animationDelay = Math.random() * 3 + "s";
+          container.appendChild(m);
+        }
+      }
+
+      // --- 2. MAGIC UI NUMBER TICKER (SAYAÇ YARATICISI) ---
+      function animateValue(id, start, end, duration, suffix = "") {
+        const element = document.getElementById(id);
+        if (!element) return;
+        let startTimestamp = null;
+        const step = (timestamp) => {
+          if (!startTimestamp) startTimestamp = timestamp;
+          const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+          const currentVal = Math.floor(progress * (end - start) + start);
+          element.innerText = currentVal.toLocaleString("tr-TR") + suffix;
+          if (progress < 1) window.requestAnimationFrame(step);
+        };
+        window.requestAnimationFrame(step);
+      }
+
+      // Meteorları HTML yüklenir yüklenmez doğur!
+      document.addEventListener("DOMContentLoaded", () => {
+        generateMeteors();
+
+        // Auto Login - Restore session if token exists
+        const token = localStorage.getItem("token");
+        const user = localStorage.getItem("username");
+        const role = localStorage.getItem("role");
+
+        if (token && user) {
+          document.getElementById("loginOverlay").style.display = "none";
+          document.getElementById("aktifKullanici").innerHTML =
+            `${user.toUpperCase()}<br/><span style='color:var(--accent-blue)'>(${role})</span>`;
+
+          // Role based UI management
+          applyRoleVisibility(role);
+
+          verileriCek();
+          kurumsalSoketBaglantisiKur();
         }
 
-        // --- 2. MAGIC UI NUMBER TICKER (SAYAÇ YARATICISI) ---
-        function animateValue(id, start, end, duration, suffix="") {
-            const element = document.getElementById(id);
-            if(!element) return;
-            let startTimestamp = null;
-            const step = (timestamp) => {
-                if (!startTimestamp) startTimestamp = timestamp;
-                const progress = Math.min((timestamp - startTimestamp) / duration, 1);
-                const currentVal = Math.floor(progress * (end - start) + start);
-                element.innerText = currentVal.toLocaleString('tr-TR') + suffix;
-                if (progress < 1) window.requestAnimationFrame(step);
-            };
-            window.requestAnimationFrame(step);
+        // Register PWA Service Worker
+        if ("serviceWorker" in navigator) {
+          navigator.serviceWorker
+            .register("/sw.js")
+            .then(() => console.log("PWA Ready"));
         }
+      });
 
-        // Meteorları HTML yüklenir yüklenmez doğur!
-        document.addEventListener('DOMContentLoaded', () => {
-            generateMeteors();
-            
-            // Auto Login - Restore session if token exists
-            const token = localStorage.getItem("token");
-            const user = localStorage.getItem("username");
-            const role = localStorage.getItem("role");
-            
-            if(token && user) {
-                document.getElementById("loginOverlay").style.display = "none";
-                document.getElementById("aktifKullanici").innerHTML = `${user.toUpperCase()}<br/><span style='color:var(--accent-blue)'>(${role})</span>`;
-                
-                // Role based UI management
-                if(role === "Barista") {
-                    const noAccess = ["nav-dashboard", "nav-entegrasyon", "nav-talepler", "nav-raporlar", "nav-ai-predictor", "nav-audit"];
-                    noAccess.forEach(id => { if(document.getElementById(id)) document.getElementById(id).style.display = "none"; });
-                    document.getElementById("nav-depo").click();
-                }
-                
-                verileriCek();
-                kurumsalSoketBaglantisiKur();
-            }
+      const API_URL = window.location.origin;
+      let lineChartInstance = null;
+      let pieChartInstance = null;
+      let ws = null; // WebSocket Değişkeni
+      let html5QrcodeScanner = null; // Kamera Tarayıcı Değişkeni
 
-            // Register PWA Service Worker
-            if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.register('/sw.js').then(() => console.log("PWA Ready"));
-            }
+      let currentLang = "TR";
+      function t(trText, enText) {
+        return currentLang === "EN" ? enText : trText;
+      }
+      function setLanguage(lang) {
+        currentLang = lang;
+        if (lang === "TR") {
+          document.getElementById("btn-tr").style.background =
+            "var(--accent-green)";
+          document.getElementById("btn-tr").style.color = "#000";
+          document.getElementById("btn-en").style.background = "transparent";
+          document.getElementById("btn-en").style.color = "var(--text-muted)";
+        } else {
+          document.getElementById("btn-en").style.background =
+            "var(--accent-green)";
+          document.getElementById("btn-en").style.color = "#000";
+          document.getElementById("btn-tr").style.background = "transparent";
+          document.getElementById("btn-tr").style.color = "var(--text-muted)";
+        }
+        // Trigger automatic UI text updates based on data tags
+        document.querySelectorAll("[data-tr]").forEach((el) => {
+          el.innerHTML =
+            currentLang === "TR"
+              ? el.getAttribute("data-tr")
+              : el.getAttribute("data-en");
         });
+        if (typeof loadStokSiparis === "function" && document.getElementById("stok-siparis-table")) {
+          loadStokSiparis();
+        }
 
-        const API_URL = window.location.origin;
-        let lineChartInstance = null; let pieChartInstance = null;
-        let ws = null; // WebSocket Değişkeni
-        let html5QrcodeScanner = null; // Kamera Tarayıcı Değişkeni
+        // Update Page Header to matching string (since it resets on tab change)
+        const act = document.querySelector(".nav-item.active");
+        if (act)
+          document.getElementById("sayfa-basligi").innerText = act.innerText
+            .replace(/[^\w\sğüşöçıİĞÜŞÖÇ]/gi, "")
+            .trim();
 
-        let currentLang = "TR";
-        function t(trText, enText) { return currentLang === 'EN' ? enText : trText; }
-        function setLanguage(lang) {
-            currentLang = lang;
-            if(lang === 'TR') {
-                document.getElementById('btn-tr').style.background = 'var(--accent-green)';
-                document.getElementById('btn-tr').style.color = '#000';
-                document.getElementById('btn-en').style.background = 'transparent';
-                document.getElementById('btn-en').style.color = 'var(--text-muted)';
-            } else {
-                document.getElementById('btn-en').style.background = 'var(--accent-green)';
-                document.getElementById('btn-en').style.color = '#000';
-                document.getElementById('btn-tr').style.background = 'transparent';
-                document.getElementById('btn-tr').style.color = 'var(--text-muted)';
-            }
-            // Trigger automatic UI text updates based on data tags
-            document.querySelectorAll('[data-tr]').forEach(el => {
-                el.innerHTML = (currentLang === 'TR') ? el.getAttribute('data-tr') : el.getAttribute('data-en');
+        verileriCek();
+      }
+
+      // --- GÜVENLİK (AUTH) YÖNETİMİ ---
+      async function sistemeGirisYap() {
+        const user = document.getElementById("username").value;
+        const pass = document.getElementById("password").value;
+
+        try {
+          // Enterprise Uygulamalar Form Data Tipi İstemez, Oauth token doğrudan form kabul eder ama basit JSON tuttuk
+          const res = await fetch(API_URL + "/token", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username: user, password: pass }),
+          });
+          const data = await res.json();
+
+          if (res.ok && data.access_token) {
+            localStorage.setItem("token", data.access_token);
+            localStorage.setItem("role", data.role);
+            localStorage.setItem("username", user);
+
+            document.getElementById("loginOverlay").style.opacity = "0";
+            setTimeout(
+              () =>
+                (document.getElementById("loginOverlay").style.display =
+                  "none"),
+              500,
+            );
+
+            document.getElementById("aktifKullanici").innerHTML =
+              `${user.toUpperCase()}<br/><span style='color:var(--accent-blue)'>(${data.role})</span>`;
+
+            applyRoleVisibility(data.role);
+
+            // Giriş Başarılıysa Verileri Çek ve WebSocketi Kur
+            verileriCek();
+            kurumsalSoketBaglantisiKur();
+          } else {
+            const err = document.getElementById("loginError");
+            err.innerText = data.detail || "Giriş Başarısız!";
+            err.style.display = "block";
+          }
+        } catch (e) {
+          alert("Sunucuya bağlanılamadı. Uvicorn çalışıyor mu?");
+        }
+      }
+
+      function cikisYap() {
+        localStorage.removeItem("token");
+        localStorage.removeItem("role");
+        localStorage.removeItem("username");
+        window.location.reload(); // En doğal çıkış yöntemi
+      }
+
+      function getHeaders() {
+        return {
+          Authorization: "Bearer " + localStorage.getItem("token"),
+          "Content-Type": "application/json",
+        };
+      }
+
+      // --- WEBSOCKETS (CANLI BİLDİRİM MİMARİSİ) ---
+      function applyRoleVisibility(role) {
+        const hideForBarista = [
+          "nav-dashboard",
+          "nav-talepler",
+          "nav-raporlar",
+          "nav-audit",
+          "nav-pending-users",
+          "nav-stok-siparis",
+        ];
+        const hideForDepo = ["nav-audit", "nav-talepler", "nav-pending-users"];
+        let toHide = [];
+        if (role === "Barista") toHide = hideForBarista;
+        else if (role === "Depo Müdürü") toHide = hideForDepo;
+        // Admin görür hepsini
+        toHide.forEach((id) => {
+          const el = document.getElementById(id);
+          if (el) el.style.display = "none";
+        });
+        if (role === "Barista") {
+          const depo = document.getElementById("nav-depo");
+          if (depo) depo.click();
+        }
+      }
+
+      // --- STOK SİPARİŞ YÖNETİMİ ---
+      let _stokSiparisCache = [];
+
+      async function loadStokSiparis() {
+        const tbl = document.getElementById("stok-siparis-table");
+        if (!tbl) return;
+        const data = await apiIstek("/urunler");
+        if (data && data.data && data.data.length > 0) {
+          _stokSiparisCache = data.data;
+          tbl.innerHTML = "";
+          data.data.forEach((u) => {
+            const ad = currentLang === "TR" ? u.name_tr : (u.name_en || u.name_tr);
+            const kat = currentLang === "TR" ? u.category_name_tr : (u.category_name_en || u.category_name_tr);
+            tbl.innerHTML += `<tr>
+              <td><code>${u.sku || "-"}</code></td>
+              <td><b>${ad}</b></td>
+              <td>${kat || "-"}</td>
+              <td>${u.supplier_name || "-"}</td>
+              <td>${u.warehouse_location || "-"}</td>
+              <td>${u.expiration_date || "-"}</td>
+              <td style="${u.current_stock < 15 ? 'color:var(--accent-red);font-weight:bold' : 'color:var(--accent-green);font-weight:bold'}">${u.current_stock}</td>
+              <td>₺${(u.unit_price || 0).toFixed(2)}</td>
+              <td>
+                <button class="btn" onclick="stokSiparisFormAc(${u.product_id})" style="padding:4px 10px; font-size:0.8rem;">${t("Düzenle","Edit")}</button>
+                <button class="btn btn-red" onclick="stokSiparisSil(${u.product_id}, '${(ad || '').replace(/'/g,"\\'")}')" style="padding:4px 10px; font-size:0.8rem;">${t("Sil","Delete")}</button>
+              </td>
+            </tr>`;
+          });
+        } else {
+          tbl.innerHTML = `<tr><td colspan="9" style="text-align:center;color:#94a3b8">${t("Kayıt yok.","No records.")}</td></tr>`;
+        }
+
+        const logTbl = document.getElementById("stok-log-table");
+        if (logTbl) {
+          const logData = await apiIstek("/stok-log?limit=50");
+          if (logData && logData.log && logData.log.length > 0) {
+            logTbl.innerHTML = "";
+            logData.log.forEach((l) => {
+              const tip = l.transaction_type === "IN" ? `<span class="badge badge-IN">IN</span>` : `<span class="badge badge-OUT">OUT</span>`;
+              logTbl.innerHTML += `<tr>
+                <td>${l.transaction_date ? new Date(l.transaction_date).toLocaleString() : "-"}</td>
+                <td><code>${l.sku}</code></td>
+                <td>${l.urun_adi}</td>
+                <td>${tip}</td>
+                <td>${l.quantity}</td>
+                <td><b>${l.processed_by}</b></td>
+                <td>${l.status}</td>
+                <td style="color:var(--text-muted); font-size:0.85rem;">${l.notes || "-"}</td>
+              </tr>`;
             });
+          } else {
+            logTbl.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#94a3b8">${t("Hareket yok.","No movements.")}</td></tr>`;
+          }
+        }
+      }
 
-            // Update Page Header to matching string (since it resets on tab change)
-            const act = document.querySelector('.nav-item.active');
-            if(act) document.getElementById('sayfa-basligi').innerText = act.innerText.replace(/[^\w\sğüşöçıİĞÜŞÖÇ]/gi, '').trim();
+      function _ssSkuAutofill() {
+        const sku = document.getElementById("ss-sku").value.trim();
+        if (!sku) return;
+        const u = _stokSiparisCache.find((x) => (x.sku || "").toLowerCase() === sku.toLowerCase());
+        if (!u) return;
+        document.getElementById("ss-product-id").value = u.product_id;
+        document.getElementById("ss-warehouse").value = u.warehouse_location || "";
+        document.getElementById("ss-name-tr").value = u.name_tr || "";
+        document.getElementById("ss-name-en").value = u.name_en || "";
+        document.getElementById("ss-category-id").value = u.category_id || "";
+        document.getElementById("ss-supplier-id").value = u.supplier_id || "";
+        document.getElementById("ss-unit-cost").value = u.unit_cost || "";
+        document.getElementById("ss-unit-price").value = u.unit_price || "";
+        document.getElementById("ss-current-stock").value = u.current_stock || 0;
+        document.getElementById("ss-reorder-point").value = u.reorder_point || 10;
+        document.getElementById("ss-expiration").value = u.expiration_date || "";
+        document.getElementById("ss-abc").value = u.abc_class || "C";
+        document.getElementById("stok-siparis-modal-baslik").innerText = t("Ürünü Düzenle","Edit Product");
+      }
 
-            verileriCek();
+      async function _ssSave(endpoint, method, body) {
+        try {
+          const opt = { method, headers: getHeaders() };
+          if (body && method !== "GET" && method !== "DELETE") opt.body = JSON.stringify(body);
+          const res = await fetch(API_URL + endpoint, opt);
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            const msg = (data && (data.detail || data.mesaj)) || `HTTP ${res.status}`;
+            return { ok: false, msg: typeof msg === "string" ? msg : JSON.stringify(msg) };
+          }
+          return { ok: true, msg: data.mesaj || t("Başarılı","Success") };
+        } catch (e) {
+          return { ok: false, msg: e.message || "Network error" };
+        }
+      }
+
+      function _ssPopulateChoices() {
+        const uniq = (arr) => [...new Set(arr.filter(Boolean))];
+        const setDatalist = (id, values) => {
+          const dl = document.getElementById(id);
+          if (!dl) return;
+          dl.innerHTML = uniq(values).map((v) => `<option value="${String(v).replace(/"/g,'&quot;')}">`).join("");
+        };
+        setDatalist("dl-sku", _stokSiparisCache.map((u) => u.sku));
+        setDatalist("dl-warehouse", _stokSiparisCache.map((u) => u.warehouse_location));
+        setDatalist("dl-name-tr", _stokSiparisCache.map((u) => u.name_tr));
+        setDatalist("dl-name-en", _stokSiparisCache.map((u) => u.name_en));
+
+        const catSel = document.getElementById("ss-category-id");
+        const supSel = document.getElementById("ss-supplier-id");
+        const cats = {}, sups = {};
+        _stokSiparisCache.forEach((u) => {
+          if (u.category_id && !cats[u.category_id]) cats[u.category_id] = u.category_name_tr || u.category_name_en || ("#" + u.category_id);
+          if (u.supplier_id && !sups[u.supplier_id]) sups[u.supplier_id] = u.supplier_name || ("#" + u.supplier_id);
+        });
+        catSel.innerHTML = `<option value="">${t("Seçiniz","Select")}</option>` + Object.entries(cats).map(([id, n]) => `<option value="${id}">${n}</option>`).join("");
+        supSel.innerHTML = `<option value="">${t("Seçiniz","Select")}</option>` + Object.entries(sups).map(([id, n]) => `<option value="${id}">${n}</option>`).join("");
+      }
+
+      function stokSiparisFormAc(productId) {
+        _ssPopulateChoices();
+        const modal = document.getElementById("stok-siparis-modal");
+        const baslik = document.getElementById("stok-siparis-modal-baslik");
+        document.getElementById("ss-product-id").value = productId || "";
+        const fields = ["ss-sku","ss-warehouse","ss-name-tr","ss-name-en","ss-category-id","ss-supplier-id","ss-unit-cost","ss-unit-price","ss-current-stock","ss-reorder-point","ss-expiration"];
+        fields.forEach((id) => { const el = document.getElementById(id); if (el) el.value = ""; });
+        document.getElementById("ss-abc").value = "C";
+        if (productId) {
+          const u = _stokSiparisCache.find((x) => x.product_id === productId);
+          if (u) {
+            baslik.innerText = t("Ürünü Düzenle","Edit Product");
+            document.getElementById("ss-sku").value = u.sku || "";
+            document.getElementById("ss-warehouse").value = u.warehouse_location || "";
+            document.getElementById("ss-name-tr").value = u.name_tr || "";
+            document.getElementById("ss-name-en").value = u.name_en || "";
+            document.getElementById("ss-category-id").value = u.category_id || "";
+            document.getElementById("ss-supplier-id").value = u.supplier_id || "";
+            document.getElementById("ss-unit-cost").value = u.unit_cost || "";
+            document.getElementById("ss-unit-price").value = u.unit_price || "";
+            document.getElementById("ss-current-stock").value = u.current_stock || 0;
+            document.getElementById("ss-reorder-point").value = u.reorder_point || 10;
+            document.getElementById("ss-expiration").value = u.expiration_date || "";
+          }
+        } else {
+          baslik.innerText = t("Yeni Ürün Siparişi","New Product Order");
+        }
+        modal.style.display = "flex";
+      }
+
+      function stokSiparisFormKapat() {
+        document.getElementById("stok-siparis-modal").style.display = "none";
+      }
+
+      async function stokSiparisKaydet() {
+        const pid = document.getElementById("ss-product-id").value;
+        const payload = {
+          sku: document.getElementById("ss-sku").value.trim(),
+          name_tr: document.getElementById("ss-name-tr").value.trim(),
+          name_en: document.getElementById("ss-name-en").value.trim(),
+          category_id: parseInt(document.getElementById("ss-category-id").value) || null,
+          supplier_id: parseInt(document.getElementById("ss-supplier-id").value) || null,
+          unit_cost: parseFloat(document.getElementById("ss-unit-cost").value) || 0,
+          unit_price: parseFloat(document.getElementById("ss-unit-price").value) || 0,
+          current_stock: parseInt(document.getElementById("ss-current-stock").value) || 0,
+          reorder_point: parseInt(document.getElementById("ss-reorder-point").value) || 10,
+          abc_class: document.getElementById("ss-abc").value.trim() || "C",
+          expiration_date: document.getElementById("ss-expiration").value || null,
+          warehouse_location: document.getElementById("ss-warehouse").value.trim() || "Ana Depo",
+        };
+        const result = pid
+          ? await _ssSave(`/urun/${pid}`, "PUT", payload)
+          : await _ssSave("/urun-ekle", "POST", payload);
+        if (result.ok) {
+          alert(result.msg);
+          stokSiparisFormKapat();
+          loadStokSiparis();
+        } else {
+          alert(t("İşlem başarısız: ","Operation failed: ") + result.msg);
+        }
+      }
+
+      async function stokSiparisSil(productId, ad) {
+        if (!confirm(t(`"${ad}" ürününü silmek istediğinize emin misiniz?`, `Delete "${ad}"?`))) return;
+        const result = await _ssSave(`/urun/${productId}`, "DELETE", {});
+        if (result.ok) {
+          alert(result.msg);
+          loadStokSiparis();
+        } else {
+          alert(t("Silme başarısız: ","Delete failed: ") + result.msg);
+        }
+      }
+
+      async function onaylaKullanici(userId) {
+        const r = await apiIstek(`/approve-user/${userId}`, "POST");
+        if (r) {
+          alert(t("Kullanıcı onaylandı.", "User approved."));
+          verileriCek();
+        }
+      }
+
+      async function reddetKullanici(userId) {
+        if (!confirm(t("Kullanıcıyı reddet ve sil?", "Reject and delete user?"))) return;
+        const r = await apiIstek(`/reject-user/${userId}`, "DELETE");
+        if (r) {
+          alert(t("Kullanıcı reddedildi.", "User rejected."));
+          verileriCek();
+        }
+      }
+
+      function kurumsalSoketBaglantisiKur() {
+        if (ws != null) ws.close(); // Eski varsa kapat
+
+        const wsProtocol =
+          window.location.protocol === "https:" ? "wss:" : "ws:";
+        ws = new WebSocket(
+          `${wsProtocol}//${window.location.host}/ws/notifications`,
+        );
+        ws.onmessage = function (event) {
+          const msj = event.data;
+          // Anında Toast Bildirimi Fırlat
+          geciciUyariGoster(msj);
+
+          // Arka planda listeleri yenile (Özellikle Depo müdürünün tablosuna anında düşmesi için)
+          if (msj.includes("TABLO") || msj.includes("TALEB")) verileriCek();
+        };
+        ws.onclose = () => console.log("Canlı Soket Bağlantısı Koptu.");
+      }
+
+      function geciciUyariGoster(metin) {
+        const toast = document.createElement("div");
+        toast.className = "toast";
+        toast.innerText =
+          metin === "TABLO_YENILE" ? "🔄 Tablo Güncellendi" : metin;
+        const alan = document.getElementById("toastArea");
+        alan.appendChild(toast);
+        setTimeout(() => {
+          toast.remove();
+        }, 5000);
+      }
+
+      // --- OTOMATİK VERİ ÇEKME YÖNETİMİ ---
+      function tabDegistir(tabID, element) {
+        document
+          .querySelectorAll(".nav-item")
+          .forEach((el) => el.classList.remove("active"));
+        element.classList.add("active");
+        document
+          .querySelectorAll(".tab-content")
+          .forEach((el) => el.classList.remove("active"));
+        document.getElementById(tabID).classList.add("active");
+        document.getElementById("sayfa-basligi").innerText = element.innerText
+          .replace(/[^\w\sğüşöçıİĞÜŞÖÇ]/gi, "")
+          .trim();
+        verileriCek();
+        if (tabID === "tab-stok-siparis" && typeof loadStokSiparis === "function") {
+          loadStokSiparis();
+        }
+      }
+
+      async function apiIstek(endpoint, method = "GET", bodyObj = null) {
+        try {
+          const opt = { method: method, headers: getHeaders() };
+          if (bodyObj) opt.body = JSON.stringify(bodyObj);
+
+          const res = await fetch(API_URL + endpoint, opt);
+          if (res.status === 401 || res.status === 403)
+            throw new Error("Erişim Kısıtlı");
+          return await res.json();
+        } catch (e) {
+          return null;
+        }
+      }
+
+      async function verileriCek() {
+        // Token yoksa durdur.
+        if (!localStorage.getItem("token")) return;
+
+        const gizliTxt = t("Erişim Kısıtlı", "Access Denied");
+
+        // Dashboard Özeti
+        const ozet = await apiIstek("/dashboard-ozet");
+        if (ozet) {
+          animateValue(
+            "kritik-stok",
+            0,
+            parseInt(ozet.kritik_stok_uyari_sayisi || 0),
+            1000,
+            t(" Risk", " Risk"),
+          );
+        } else {
+          const k = document.getElementById("kritik-stok");
+          if (k) k.innerText = gizliTxt;
         }
 
-        // --- GÜVENLİK (AUTH) YÖNETİMİ ---
-        async function sistemeGirisYap() {
-            const user = document.getElementById("username").value;
-            const pass = document.getElementById("password").value;
-            
-            try {
-                // Enterprise Uygulamalar Form Data Tipi İstemez, Oauth token doğrudan form kabul eder ama basit JSON tuttuk
-                const res = await fetch(API_URL + "/token", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({username: user, password: pass})
-                });
-                const data = await res.json();
-                
-                if(res.ok && data.access_token) {
-                    localStorage.setItem("token", data.access_token);
-                    localStorage.setItem("role", data.role);
-                    localStorage.setItem("username", user);
-                    
-                    document.getElementById("loginOverlay").style.opacity = "0";
-                    setTimeout(() => document.getElementById("loginOverlay").style.display = "none", 500);
-                    
-                    document.getElementById("aktifKullanici").innerHTML = `${user.toUpperCase()}<br/><span style='color:var(--accent-blue)'>(${data.role})</span>`;
-                    
-                    // Güvenlik: UI Rol Bazlı Erişim Yönetimi
-                    if(data.role === "Barista") {
-                        const noAccess = ["nav-dashboard", "nav-entegrasyon", "nav-talepler", "nav-raporlar", "nav-ai-predictor", "nav-audit"];
-                        noAccess.forEach(id => { if(document.getElementById(id)) document.getElementById(id).style.display = "none"; });
-                        document.getElementById("nav-depo").click();
-                    }
-                    
-                    // Giriş Başarılıysa Verileri Çek ve WebSocketi Kur
-                    verileriCek();
-                    kurumsalSoketBaglantisiKur();
-                } else {
-                    const err = document.getElementById("loginError");
-                    err.innerText = data.detail || "Giriş Başarısız!";
-                    err.style.display = "block";
-                }
-            } catch(e) {
-                alert("Sunucuya bağlanılamadı. Uvicorn çalışıyor mu?");
-            }
+        // Pending Users (Admin only)
+        if (document.getElementById("pending-users-table")) {
+          const pu = await apiIstek("/pending-users");
+          const tb = document.getElementById("pending-users-table");
+          if (pu && pu.users && pu.users.length > 0) {
+            tb.innerHTML = "";
+            pu.users.forEach((u) => {
+              tb.innerHTML += `<tr><td>${u.id}</td><td><b>${u.username}</b></td><td>${u.role}</td><td><button class="btn" onclick="onaylaKullanici(${u.id})">${t("Onayla","Approve")}</button> <button class="btn btn-red" onclick="reddetKullanici(${u.id})">${t("Reddet","Reject")}</button></td></tr>`;
+            });
+          } else {
+            tb.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#94a3b8">${t("Bekleyen kullanıcı yok.","No pending users.")}</td></tr>`;
+          }
         }
 
-        function cikisYap() {
-            localStorage.removeItem("token");
-            localStorage.removeItem("role");
-            localStorage.removeItem("username");
-            window.location.reload(); // En doğal çıkış yöntemi
-        }
-
-        function getHeaders() {
-            return { "Authorization": "Bearer " + localStorage.getItem("token"), "Content-Type": "application/json" };
-        }
-
-        // --- WEBSOCKETS (CANLI BİLDİRİM MİMARİSİ) ---
-        function kurumsalSoketBaglantisiKur() {
-            if(ws != null) ws.close(); // Eski varsa kapat
-            
-            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            ws = new WebSocket(`${wsProtocol}//${window.location.host}/ws/notifications`);
-            ws.onmessage = function(event) {
-                const msj = event.data;
-                // Anında Toast Bildirimi Fırlat
-                geciciUyariGoster(msj);
-                
-                // Arka planda listeleri yenile (Özellikle Depo müdürünün tablosuna anında düşmesi için)
-                if(msj.includes("TABLO") || msj.includes("TALEB")) verileriCek();
-            };
-            ws.onclose = () => console.log("Canlı Soket Bağlantısı Koptu.");
-        }
-
-        function geciciUyariGoster(metin) {
-            const toast = document.createElement("div");
-            toast.className = "toast";
-            toast.innerText = (metin === "TABLO_YENILE") ? "🔄 Tablo Güncellendi" : metin;
-            const alan = document.getElementById("toastArea");
-            alan.appendChild(toast);
-            setTimeout(() => { toast.remove(); }, 5000);
-        }
-
-        // --- OTOMATİK VERİ ÇEKME YÖNETİMİ ---
-        function tabDegistir(tabID, element) {
-            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-            element.classList.add('active');
-            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-            document.getElementById(tabID).classList.add('active');
-            document.getElementById('sayfa-basligi').innerText = element.innerText.replace(/[^\w\sğüşöçıİĞÜŞÖÇ]/gi, '').trim();
-            verileriCek();
-        }
-
-        async function apiIstek(endpoint, method="GET", bodyObj=null) {
-            try {
-                const opt = { method: method, headers: getHeaders() };
-                if(bodyObj) opt.body = JSON.stringify(bodyObj);
-                
-                const res = await fetch(API_URL + endpoint, opt);
-                if(res.status === 401 || res.status === 403) throw new Error("Erişim Kısıtlı");
-                return await res.json();
-            } catch (e) {
-                return null;
-            }
-        }
-
-        async function verileriCek() {
-            // Token yoksa durdur.
-            if(!localStorage.getItem("token")) return;
-
-            const gizliTxt = t("Erişim Kısıtlı", "Access Denied");
-
-            // Dashboard Özeti (Z-Raporu Enjekte Edildi)
-            const ozet = await apiIstek("/dashboard-ozet");
-            if (ozet) {
-                // Ciro hesaplanırken number ticker efekti!
-                animateValue("gunluk-ciro", 0, parseFloat(ozet.gunluk_ciro_tl || 0), 2000, " ₺");
-                let barisTxt = ozet.gunun_baristasi || t("Kayıt Yok", "No Records");
-                if(currentLang === 'EN') barisTxt = barisTxt.replace("Hasılat:", "Revenue:");
-                document.getElementById("gunun-baristasi").innerText = barisTxt;
-                animateValue("kritik-stok", 0, parseInt(ozet.kritik_stok_uyari_sayisi || 0), 1000, t(" Risk", " Risk"));
-            } else {
-                document.getElementById("gunluk-ciro").innerText = gizliTxt; document.getElementById("kritik-stok").innerText = gizliTxt;
-                document.getElementById("gunun-baristasi").innerText = gizliTxt;
-            }
-
-            // DEPODAKİ TÜM ÜRÜNLERİ LİSTELEME
-            if (document.getElementById("depo-table")) {
-                const urunler = await apiIstek("/urunler");
-                const tbodyDepo = document.getElementById("depo-table");
-                if (urunler && urunler.data && urunler.data.length > 0) {
-                    tbodyDepo.innerHTML = "";
-                    urunler.data.forEach(u => {
-                        let stokStili = u.current_stock < 15 ? 'color:var(--accent-red); font-weight:bold;' : 'color:var(--accent-green); font-weight:bold;';
-                        let uName = currentLang === 'TR' ? u.name_tr : (u.name_en || u.name_tr);
-                        let uCat = currentLang === 'TR' ? u.category_name_tr : (u.category_name_en || u.category_name_tr);
-                        let wLoc = u.warehouse_location ? u.warehouse_location.replace("Blok", t("Blok", "Block")).replace("Raf", t("Raf", "Rack")) : t('İşlenmedi', 'Not Set');
-                        tbodyDepo.innerHTML += `<tr style="transition:0.2s; cursor:pointer;" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='transparent'">
-                            <td><span style="background:rgba(255,255,255,0.05); padding:4px 8px; border-radius:6px; font-family:monospace; font-size:0.8rem; border:1px solid var(--border)">${u.sku || 'SKU-?'}</span></td>
+        // DEPODAKİ TÜM ÜRÜNLERİ LİSTELEME
+        if (document.getElementById("depo-table")) {
+          const urunler = await apiIstek("/urunler");
+          const tbodyDepo = document.getElementById("depo-table");
+          if (urunler && urunler.data && urunler.data.length > 0) {
+            tbodyDepo.innerHTML = "";
+            urunler.data.forEach((u) => {
+              let stokStili =
+                u.current_stock < 15
+                  ? "color:var(--accent-red); font-weight:bold;"
+                  : "color:var(--accent-green); font-weight:bold;";
+              let uName =
+                currentLang === "TR" ? u.name_tr : u.name_en || u.name_tr;
+              let uCat =
+                currentLang === "TR"
+                  ? u.category_name_tr
+                  : u.category_name_en || u.category_name_tr;
+              let wLoc = u.warehouse_location
+                ? u.warehouse_location
+                    .replace("Blok", t("Blok", "Block"))
+                    .replace("Raf", t("Raf", "Rack"))
+                : t("İşlenmedi", "Not Set");
+              tbodyDepo.innerHTML += `<tr style="transition:0.2s; cursor:pointer;" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='transparent'">
+                            <td><span style="background:rgba(255,255,255,0.05); padding:4px 8px; border-radius:6px; font-family:monospace; font-size:0.8rem; border:1px solid var(--border)">${u.sku || "SKU-?"}</span></td>
                             <td onclick="openProductEdit(${u.product_id})"><b>${uName}</b></td>
-                            <td>${uCat || t('Diğer','Other')}</td>
-                            <td>${u.supplier_name || '-'}</td>
+                            <td>${uCat || t("Diğer", "Other")}</td>
+                            <td>${u.supplier_name || "-"}</td>
                             <td><span style="padding:4px 8px; border-radius:4px; font-size:0.85rem; background:rgba(96,165,250,0.1); color:var(--accent-blue);">${wLoc}</span></td>
-                            <td>${u.expiration_date || '-'}</td>
+                            <td>${u.expiration_date || "-"}</td>
                             <td style="${stokStili}">${u.current_stock} <small style='color:var(--text-muted); font-weight:normal;'>ADET</small></td>
                             <td>₺${u.unit_price.toFixed(2)}</td>
                         </tr>`;
-                    });
-                }
-            }
-            
-            // MAGIC KASA: POS MENUSUNU GETIR
-            const menuVerisi = await apiIstek("/menu-getir");
-            if(document.getElementById("pos-menu-grid") && menuVerisi && menuVerisi.menu) {
-                let divHTML = "";
-                menuVerisi.menu.forEach(m => {
-                    divHTML += `
-                    <div onclick="posSatisiYap(${m.id}, '${m.name}')" 
-                         class="nav-item" style="background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 12px; padding: 20px; text-align: center; cursor: pointer; transition: transform 0.2s;">
-                        <div style="font-size: 3rem;">${m.emoji}</div>
-                        <div style="font-weight: bold; margin-top: 10px;">${m.name}</div>
-                        <div style="color: var(--accent-green); margin-top: 5px;">${m.price.toLocaleString('tr-TR')} ₺</div>
-                        <button class="btn btn-shimmer" style="margin-top:15px; width:100%;">Müşteriye Sat</button>
-                    </div>`;
-                });
-                document.getElementById("pos-menu-grid").innerHTML = divHTML;
-            }
+            });
+          }
+        }
 
-            // Fire Raporu
-            const fire = await apiIstek("/fire-raporu");
-            if(fire) animateValue("fire-zarari", 0, parseFloat(fire.toplam_fire_zarari_tl || 0), 2000, " ₺");
-            else document.getElementById("fire-zarari").innerText = gizliTxt;
+        // Fire Raporu
+        const fire = await apiIstek("/fire-raporu");
+        if (fire)
+          animateValue(
+            "fire-zarari",
+            0,
+            parseFloat(fire.toplam_fire_zarari_tl || 0),
+            2000,
+            " ₺",
+          );
+        else document.getElementById("fire-zarari").innerText = gizliTxt;
 
-            // Tahmin Verisi Çek (Modele Göndermek Üzere Ram'e al)
-            const ai = await apiIstek("/talep-tahmini");
-            if (ai && ai.haftalik_talep_tahmini && ai.haftalik_talep_tahmini.length>0) {
-                window.aiTahminTextTR = ai.haftalik_talep_tahmini[0].urun_adi_tr;
-                window.aiTahminTextEN = ai.haftalik_talep_tahmini[0].urun_adi_en;
-            }
+        // Tahmin Verisi Çek (Modele Göndermek Üzere Ram'e al)
+        const ai = await apiIstek("/talep-tahmini");
+        if (
+          ai &&
+          ai.haftalik_talep_tahmini &&
+          ai.haftalik_talep_tahmini.length > 0
+        ) {
+          window.aiTahminTextTR = ai.haftalik_talep_tahmini[0].urun_adi_tr;
+          window.aiTahminTextEN = ai.haftalik_talep_tahmini[0].urun_adi_en;
+        }
 
-            // Grafikler
-            const sevk = await apiIstek("/sevk-raporu");
-            if (sevk && sevk.grafik_2_cizgi && document.getElementById('lineChart')) {
-                cizgiGrafikCiz(sevk.grafik_2_cizgi.veriler);
-                pastaGrafikCiz(sevk.grafik_1_pasta.veriler);
-            }
+        // Grafikler
+        const sevk = await apiIstek("/sevk-raporu");
+        if (
+          sevk &&
+          sevk.grafik_2_cizgi &&
+          document.getElementById("lineChart")
+        ) {
+          cizgiGrafikCiz(sevk.grafik_2_cizgi.veriler);
+          pastaGrafikCiz(sevk.grafik_1_pasta.veriler);
+        }
 
-            // Tablo
-            const talepler = await apiIstek("/bekleyen-talepler");
-            const tbody = document.getElementById("talepler-table");
-            if (tbody) {
-                tbody.innerHTML = "";
-                if (talepler && talepler.talepler && talepler.talepler.length > 0) {
-                    talepler.talepler.forEach(req => {
-                        let btnHtml = `<button class="btn" onclick="talepYanitla(${req.transaction_id}, 'ONAYLANDI')">${t('Onayla', 'Approve')}</button> <button class="btn btn-red" onclick="talepYanitla(${req.transaction_id}, 'İPTAL')">${t('Reddet', 'Reject')}</button>`;
-                        tbody.innerHTML += `<tr>
+        // Tablo
+        const talepler = await apiIstek("/bekleyen-talepler");
+        const tbody = document.getElementById("talepler-table");
+        if (tbody) {
+          tbody.innerHTML = "";
+          if (talepler && talepler.talepler && talepler.talepler.length > 0) {
+            talepler.talepler.forEach((req) => {
+              let btnHtml = `<button class="btn" onclick="talepYanitla(${req.transaction_id}, 'ONAYLANDI')">${t("Onayla", "Approve")}</button> <button class="btn btn-red" onclick="talepYanitla(${req.transaction_id}, 'İPTAL')">${t("Reddet", "Reject")}</button>`;
+              tbody.innerHTML += `<tr>
                                 <td>${new Date(req.transaction_date).toLocaleDateString()}</td>
-                                <td><strong>${currentLang === 'TR' ? req.urun_adi_tr : req.urun_adi_en}</strong></td>
-                                <td><span class="badge ${req.transaction_type==='IN'?'badge-IN':'badge-OUT'}">${req.transaction_type}</span></td>
+                                <td><strong>${currentLang === "TR" ? req.urun_adi_tr : req.urun_adi_en}</strong></td>
+                                <td><span class="badge ${req.transaction_type === "IN" ? "badge-IN" : "badge-OUT"}">${req.transaction_type}</span></td>
                                 <td>${req.quantity}</td><td>${req.talep_eden}</td>
                                 <td>${btnHtml}</td>
                             </tr>`;
-                    });
-                } else {
-                    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:#94a3b8">${t("Bekleyen işlem bulunmuyor veya yetkiniz yok.", "No pending transactions or you are unauthorized.")}</td></tr>`;
-                }
-            }
+            });
+          } else {
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:#94a3b8">${t("Bekleyen işlem bulunmuyor veya yetkiniz yok.", "No pending transactions or you are unauthorized.")}</td></tr>`;
+          }
+        }
 
-            // Kurumsal Raporlar
-            const tedarikciler = await apiIstek("/tedarikci-siparis");
-            if (document.getElementById("tedarikci-listesi")) {
-                let gizliTxt = currentLang === 'TR' ? "Erişim Gizli" : "Access Denied";
-                if (tedarikciler && tedarikciler.bekleyen_siparis_listesi) {
-                    let htmlList = "";
-                    for (const [sirket, detay] of Object.entries(tedarikciler.bekleyen_siparis_listesi)) {
-                        htmlList += `<div style="margin-bottom: 15px; padding: 15px; background: rgba(255,255,255,0.05); border-radius: 12px; border: 1px solid rgba(52, 211, 153, 0.2); border-left: 5px solid var(--accent-green);">
+        // Kurumsal Raporlar
+        const tedarikciler = await apiIstek("/tedarikci-siparis");
+        if (document.getElementById("tedarikci-listesi")) {
+          let gizliTxt =
+            currentLang === "TR" ? "Erişim Gizli" : "Access Denied";
+          if (tedarikciler && tedarikciler.bekleyen_siparis_listesi) {
+            let htmlList = "";
+            for (const [sirket, detay] of Object.entries(
+              tedarikciler.bekleyen_siparis_listesi,
+            )) {
+              htmlList += `<div style="margin-bottom: 15px; padding: 15px; background: rgba(255,255,255,0.05); border-radius: 12px; border: 1px solid rgba(52, 211, 153, 0.2); border-left: 5px solid var(--accent-green);">
                                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                                             <strong>🏢 ${sirket}</strong>
                                             <span style="font-size:0.75rem; color:#94a3b8">${detay.email}</span>
                                         </div>
                                         <ul style="margin:0; padding-left:20px; font-size:0.9rem;">`;
-                        detay.urunler.forEach(u => {
-                            htmlList += `<li style="margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
-                                            <span>${currentLang === 'TR' ? u.urun_tr : u.urun_en} - <b style="color:var(--accent-red)">${u.siparis_edilmesi_gereken} ${t('Adet', 'Units')}</b></span>
-                                            <button class="btn btn-shimmer" style="font-size:0.7rem; padding:4px 10px; background:var(--accent-blue);" onclick="onaylaTedarik(${u.id}, ${u.siparis_edilmesi_gereken}, '${sirket}')">${t('Siparişi Onayla', 'Approve Order')}</button>
+              detay.urunler.forEach((u) => {
+                htmlList += `<li style="margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
+                                            <span>${currentLang === "TR" ? u.urun_tr : u.urun_en} - <b style="color:var(--accent-red)">${u.siparis_edilmesi_gereken} ${t("Adet", "Units")}</b></span>
+                                            <button class="btn btn-shimmer" style="font-size:0.7rem; padding:4px 10px; background:var(--accent-blue);" onclick="onaylaTedarik(${u.id}, ${u.siparis_edilmesi_gereken}, '${sirket}')">${t("Siparişi Onayla", "Approve Order")}</button>
                                          </li>`;
-                        });
-                        htmlList += `</ul></div>`;
-                    }
-                    document.getElementById("tedarikci-listesi").innerHTML = htmlList;
-                } else {
-                    document.getElementById("tedarikci-listesi").innerHTML = `<p style="color:#94a3b8">${gizliTxt} veya Veri Yok</p>`;
-                }
+              });
+              htmlList += `</ul></div>`;
             }
+            document.getElementById("tedarikci-listesi").innerHTML = htmlList;
+          } else {
+            document.getElementById("tedarikci-listesi").innerHTML =
+              `<p style="color:#94a3b8">${gizliTxt} veya Veri Yok</p>`;
+          }
+        }
 
-            // YENI EKLENEN SKT BİLDİRİM VE LOKASYON ANALİZİ!
-            const sktData = await apiIstek("/skt-analizi");
-            if(document.getElementById("skt-table")) {
-                const tbodySKT = document.getElementById("skt-table");
-                if (sktData && sktData.skt_riskli_urunler && sktData.skt_riskli_urunler.length > 0) {
-                    tbodySKT.innerHTML = "";
-                    sktData.skt_riskli_urunler.forEach(u => {
-                        let aciliyet = u.kalan_gun <= 7 ? 'color:var(--accent-red); font-weight:bold' : 'color:var(--accent-blue)';
-                        let wLoc = u.raf_konumu ? u.raf_konumu.replace("Blok", t("Blok", "Block")).replace("Raf", t("Raf", "Rack")) : "";
-                        tbodySKT.innerHTML += `<tr>
-                            <td><strong>${currentLang === 'TR' ? u.urun_tr : (u.urun_en || u.urun_tr)}</strong></td>
+        // YENI EKLENEN SKT BİLDİRİM VE LOKASYON ANALİZİ!
+        const sktData = await apiIstek("/skt-analizi");
+        if (document.getElementById("skt-table")) {
+          const tbodySKT = document.getElementById("skt-table");
+          if (
+            sktData &&
+            sktData.skt_riskli_urunler &&
+            sktData.skt_riskli_urunler.length > 0
+          ) {
+            tbodySKT.innerHTML = "";
+            sktData.skt_riskli_urunler.forEach((u) => {
+              let aciliyet =
+                u.kalan_gun <= 7
+                  ? "color:var(--accent-red); font-weight:bold"
+                  : "color:var(--accent-blue)";
+              let wLoc = u.raf_konumu
+                ? u.raf_konumu
+                    .replace("Blok", t("Blok", "Block"))
+                    .replace("Raf", t("Raf", "Rack"))
+                : "";
+              tbodySKT.innerHTML += `<tr>
+                            <td><strong>${currentLang === "TR" ? u.urun_tr : u.urun_en || u.urun_tr}</strong></td>
                             <td><span style="background:rgba(255,255,255,0.1); padding:4px 8px; border-radius:4px; border:1px solid rgba(255,255,255,0.2)">${wLoc}</span></td>
                             <td>${u.stok} ${t("Ad.", "Pcs.")}</td>
                             <td>${u.skt_tarihi}</td>
                             <td style="${aciliyet}">${u.kalan_gun} ${t("Gün Kaldı", "Days Left")}</td>
                         </tr>`;
-                    });
-                } else if(sktData && sktData.skt_riskli_urunler) {
-                    tbodySKT.innerHTML = `<tr><td colspan="5" style="text-align:center; color:#34d399; font-weight:bold;">${t("📦 Bozulma riski olan ürün bulunmuyor. Raf süreleri güvende.", "📦 No products at risk of expiration. Shelf life is secure.")}</td></tr>`;
-                } else {
-                    tbodySKT.innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--text-muted)">${t("Erişim Gizli veya Veri Yok", "Access Denied or No Data")}</td></tr>`;
-                }
-            }
-
-            // API Keys Listesini Güncelle
-            if (document.getElementById("api-keys-table")) {
-                const apiKeysData = await apiIstek("/api/v1/api-keys");
-                const tbody = document.getElementById("api-keys-table");
-                if (apiKeysData && apiKeysData.api_keys) {
-                    tbody.innerHTML = "";
-                    apiKeysData.api_keys.forEach(k => {
-                        tbody.innerHTML += `<tr>
-                            <td>#${k.id}</td>
-                            <td><strong style="color:var(--accent-blue)">${k.provider}</strong></td>
-                            <td>${new Date(k.created_at).toLocaleString()}</td>
-                        </tr>`;
-                    });
-                } else if(apiKeysData && apiKeysData.api_keys === undefined) {
-                     tbody.innerHTML = `<tr><td colspan="3" style="text-align:center; color:#94a3b8">${t("Veri yok.", "No Data.")}</td></tr>`;
-                } else {
-                    tbody.innerHTML = `<tr><td colspan="3" style="text-align:center; color:#94a3b8">${t("Kayıtlı API bağlantısı bulunmuyor veya yetkiniz yok.", "No registered API keys or unauthorized.")}</td></tr>`;
-                }
-            }
-
-            // -- AI PREDICTOR --
-            if(document.getElementById('ai-predictor-grid')) {
-                const pred = await apiIstek('/ai-predictor');
-                renderAiPredictor(pred);
-            }
-
-            // -- AUDIT TRAIL --
-            if(document.getElementById('audit-tbody')) {
-                const auditData = await apiIstek('/audit-logs');
-                renderAuditLog(auditData);
-            }
+            });
+          } else if (sktData && sktData.skt_riskli_urunler) {
+            tbodySKT.innerHTML = `<tr><td colspan="5" style="text-align:center; color:#34d399; font-weight:bold;">${t("📦 Bozulma riski olan ürün bulunmuyor. Raf süreleri güvende.", "📦 No products at risk of expiration. Shelf life is secure.")}</td></tr>`;
+          } else {
+            tbodySKT.innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--text-muted)">${t("Erişim Gizli veya Veri Yok", "Access Denied or No Data")}</td></tr>`;
+          }
         }
 
-        async function loadCustomers() {
-            const table = document.getElementById("crm-table");
-            if(!table) return;
-            table.innerHTML = `<tr><td colspan="5" style="text-align:center">${t('Veriler Çekiliyor...', 'Fetching Data...')}</td></tr>`;
-            
-            const data = await apiIstek("/crm/musteriler");
-            if(data && data.length > 0) {
-                table.innerHTML = "";
-                data.forEach(c => {
-                    const stamps = c.points % 9;
-                    const freeCount = Math.floor(c.points / 9);
-                    let statusBadge = `<span class="badge" style="background:rgba(255,255,255,0.1); color:var(--text-muted);">${t('Yeni Müşteri', 'New Customer')}</span>`;
-                    if(c.visits > 10) statusBadge = `<span class="badge" style="background:rgba(192,132,252,0.2); color:var(--accent-purple); border:1px solid var(--accent-purple);">${t('Sadık Müşteri', 'Loyal Customer')}</span>`;
-                    if(freeCount > 0) statusBadge += ` <span class="badge" style="background:rgba(52,211,153,0.2); color:var(--accent-green); border:1px solid var(--accent-green);">🎁 ${freeCount} ${t('Hediye', 'Gift')}</span>`;
+        // -- AUDIT TRAIL --
+        if (document.getElementById("audit-tbody")) {
+          const auditData = await apiIstek("/audit-logs");
+          renderAuditLog(auditData);
+        }
+      }
 
-                    table.innerHTML += `<tr>
+      async function loadCustomers() {
+        const table = document.getElementById("crm-table");
+        if (!table) return;
+        table.innerHTML = `<tr><td colspan="5" style="text-align:center">${t("Veriler Çekiliyor...", "Fetching Data...")}</td></tr>`;
+
+        const data = await apiIstek("/crm/musteriler");
+        if (data && data.length > 0) {
+          table.innerHTML = "";
+          data.forEach((c) => {
+            const stamps = c.points % 9;
+            const freeCount = Math.floor(c.points / 9);
+            let statusBadge = `<span class="badge" style="background:rgba(255,255,255,0.1); color:var(--text-muted);">${t("Yeni Müşteri", "New Customer")}</span>`;
+            if (c.visits > 10)
+              statusBadge = `<span class="badge" style="background:rgba(192,132,252,0.2); color:var(--accent-purple); border:1px solid var(--accent-purple);">${t("Sadık Müşteri", "Loyal Customer")}</span>`;
+            if (freeCount > 0)
+              statusBadge += ` <span class="badge" style="background:rgba(52,211,153,0.2); color:var(--accent-green); border:1px solid var(--accent-green);">🎁 ${freeCount} ${t("Hediye", "Gift")}</span>`;
+
+            table.innerHTML += `<tr>
                         <td><b>${c.name}</b></td>
                         <td><small style='font-family:monospace;'>${c.phone}</small></td>
                         <td>${c.visits}</td>
-                        <td style="font-size:1.1rem; letter-spacing:2px; color:var(--accent-green);">${"☕".repeat(stamps)}${"○".repeat(9-stamps)} <small style="color:var(--text-muted); font-size:0.8rem;">(${stamps}/9)</small></td>
+                        <td style="font-size:1.1rem; letter-spacing:2px; color:var(--accent-green);">${"☕".repeat(stamps)}${"○".repeat(9 - stamps)} <small style="color:var(--text-muted); font-size:0.8rem;">(${stamps}/9)</small></td>
                         <td>${statusBadge}</td>
                     </tr>`;
-                });
-            } else {
-                table.innerHTML = `<tr><td colspan="5" style="text-align:center">${t('Müşteri Kaydı Bulunamadı', 'No Customer Records Found')}</td></tr>`;
-            }
+          });
+        } else {
+          table.innerHTML = `<tr><td colspan="5" style="text-align:center">${t("Müşteri Kaydı Bulunamadı", "No Customer Records Found")}</td></tr>`;
+        }
+      }
+
+      // ===================================
+      // HEATMAP RENDERER (İş Zekası)
+      // ===================================
+      async function loadHeatmap() {
+        const grid = document.getElementById("heatmapGrid");
+        if (!grid) return;
+
+        grid.innerHTML = `<div style="text-align:center; padding: 2rem; color:var(--text-muted);">${t("Harita Yükleniyor...", "Loading Map...")}</div>`;
+
+        const data = await apiIstek("/analytics/heatmap");
+        if (!data || !data.heatmap) {
+          grid.innerHTML = `<div style="text-align:center;color:#ef4444;padding:2rem;">Veri alınamadı</div>`;
+          return;
         }
 
+        grid.innerHTML = "";
+        const tables = data.heatmap;
+        if (tables.length === 0) return;
 
-        // ===================================
-        // HEATMAP RENDERER (İş Zekası)
-        // ===================================
-        async function loadHeatmap() {
-            const grid = document.getElementById("heatmapGrid");
-            if(!grid) return;
-            
-            grid.innerHTML = `<div style="text-align:center; padding: 2rem; color:var(--text-muted);">${t('Harita Yükleniyor...', 'Loading Map...')}</div>`;
-            
-            const data = await apiIstek("/analytics/heatmap");
-            if(!data || !data.heatmap) {
-                grid.innerHTML = `<div style="text-align:center;color:#ef4444;padding:2rem;">Veri alınamadı</div>`;
-                return;
-            }
-            
-            grid.innerHTML = '';
-            const tables = data.heatmap;
-            if(tables.length === 0) return;
-            
-            const maxRev = Math.max(...tables.map(t => t.revenue));
-            
-            tables.forEach(table => {
-                let r=51, g=65, b=85; // Default (Atıl/Slate)
-                if(table.revenue > 0) {
-                    const ratio = maxRev > 0 ? (table.revenue / maxRev) : 1;
-                    r = Math.round(234 + (5 * ratio));
-                    g = Math.round(179 - (111 * ratio));
-                    b = Math.round(8 + (60 * ratio));
-                }
-                
-                const div = document.createElement('div');
-                div.style.position = 'absolute';
-                div.style.left = table.x_pos + "px";
-                div.style.top = table.y_pos + "px";
-                div.style.width = "90px";
-                div.style.height = "90px";
-                div.style.background = `rgba(${r}, ${g}, ${b}, 0.85)`;
-                div.style.border = `2px solid rgb(${r}, ${g}, ${b})`;
-                div.style.borderRadius = "12px";
-                div.style.display = "flex";
-                div.style.flexDirection = "column";
-                div.style.alignItems = "center";
-                div.style.justifyContent = "center";
-                div.style.color = "#fff";
-                div.style.fontWeight = "bold";
-                div.style.boxShadow = `0 4px 15px rgba(${r}, ${g}, ${b}, 0.4)`;
-                div.style.cursor = "pointer";
-                div.style.transition = "transform 0.2s";
-                
-                div.onmouseenter = () => div.style.transform = "scale(1.1)";
-                div.onmouseleave = () => div.style.transform = "scale(1)";
-                
-                div.innerHTML = `
+        const maxRev = Math.max(...tables.map((t) => t.revenue));
+
+        tables.forEach((table) => {
+          let r = 51,
+            g = 65,
+            b = 85; // Default (Atıl/Slate)
+          if (table.revenue > 0) {
+            const ratio = maxRev > 0 ? table.revenue / maxRev : 1;
+            r = Math.round(234 + 5 * ratio);
+            g = Math.round(179 - 111 * ratio);
+            b = Math.round(8 + 60 * ratio);
+          }
+
+          const div = document.createElement("div");
+          div.style.position = "absolute";
+          div.style.left = table.x_pos + "px";
+          div.style.top = table.y_pos + "px";
+          div.style.width = "90px";
+          div.style.height = "90px";
+          div.style.background = `rgba(${r}, ${g}, ${b}, 0.85)`;
+          div.style.border = `2px solid rgb(${r}, ${g}, ${b})`;
+          div.style.borderRadius = "12px";
+          div.style.display = "flex";
+          div.style.flexDirection = "column";
+          div.style.alignItems = "center";
+          div.style.justifyContent = "center";
+          div.style.color = "#fff";
+          div.style.fontWeight = "bold";
+          div.style.boxShadow = `0 4px 15px rgba(${r}, ${g}, ${b}, 0.4)`;
+          div.style.cursor = "pointer";
+          div.style.transition = "transform 0.2s";
+
+          div.onmouseenter = () => (div.style.transform = "scale(1.1)");
+          div.onmouseleave = () => (div.style.transform = "scale(1)");
+
+          div.innerHTML = `
                     <div style="font-size: 0.85rem; opacity:0.8;">${table.name}</div>
                     <div style="font-size: 0.95rem; margin-top:5px;">₺${table.revenue.toLocaleString()}</div>
                 `;
-                
-                grid.appendChild(div);
-            });
-        }
 
-        // ===================================
-        // AI PREDICTOR CHART RENDERER
-        // ===================================
-        let predictorCharts = {};
-        function renderAiPredictor(data) {
-            const grid = document.getElementById('ai-predictor-grid');
-            if(!grid) return;
-            if(!data || !data.products || data.products.length === 0) {
-                grid.innerHTML = `<div style="text-align:center;color:var(--text-muted);padding:4pxrem;">${t('Yeterli veri yok — daha fazla stok hareketi eklenince model çalışır.', 'Not enough data — model activates after more stock movements.')}</div>`;
-                return;
-            }
-            grid.innerHTML = '';
-            data.products.forEach((p, idx) => {
-                const confColor = p.r2_score >= 0.7 ? '#34d399' : (p.r2_score >= 0.4 ? '#fb923c' : '#fb7185');
-                const alertBadge = p.alert
-                    ? `<div style="background:rgba(251,113,133,0.1); border:1px solid rgba(251,113,133,0.3); color:#fb7185; padding:6px 12px; border-radius:30px; font-size:0.75rem; font-weight:700; display:flex; align-items:center; gap:5px;"><span>🚨</span> ${t('Kritik Tedarik Gerekli', 'Critical Restock Req.')}</div>`
-                    : `<div style="background:rgba(52,211,153,0.1); border:1px solid rgba(52,211,153,0.3); color:#34d399; padding:6px 12px; border-radius:30px; font-size:0.75rem; font-weight:700; display:flex; align-items:center; gap:5px;"><span>✅</span> ${t('Stok Güvende', 'Stock Secure')}</div>`;
-                
-                const trendIcon = p.trend_direction === 'rising' ? '▲' : (p.trend_direction === 'falling' ? '▼' : '●');
-                const trendColor = p.trend_direction === 'rising' ? '#34d399' : (p.trend_direction === 'falling' ? '#fb7185' : '#94a3b8');
-                const canvasId = `pred-chart-${idx}`;
-                const name = currentLang === 'TR' ? p.name_tr : p.name_en;
+          grid.appendChild(div);
+        });
+      }
 
-                grid.innerHTML += `
-                    <div class="stat-card" style="padding:0; border:1px solid var(--border); background:rgba(30, 41, 59, 0.4); overflow:hidden;">
-                        <!-- Header Section -->
-                        <div style="padding: 1.5rem; background: rgba(255,255,255,0.02); border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:start;">
-                            <div>
-                                <h4 style="margin:0; font-size:1.1rem; letter-spacing:-0.02em;">${name}</h4>
-                                <div style="margin-top:4px; font-size:0.75rem; font-weight:600; color:var(--text-muted); display:flex; gap:10px;">
-                                    <span style="color:${confColor}">R² GÜVEN: ${p.r2_score}</span>
-                                    <span style="color:${trendColor}">${trendIcon} ${t('Trend:', 'Trend:')} ${p.trend_direction.toUpperCase()}</span>
-                                </div>
-                            </div>
-                            ${alertBadge}
-                        </div>
-                        
-                        <!-- Stats Grid -->
-                        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:1px; background:var(--border);">
-                            <div style="padding: 1rem; background: var(--surface); text-align:center;">
-                                <div style="font-size:0.65rem; color:var(--text-muted); margin-bottom:4px;">${t('MEVCUT STOK', 'CURRENT STOCK')}</div>
-                                <div style="font-size:1.1rem; font-weight:800; color:var(--accent-blue);">${p.current_stock}</div>
-                            </div>
-                            <div style="padding: 1rem; background: var(--surface); text-align:center;">
-                                <div style="font-size:0.65rem; color:var(--text-muted); margin-bottom:4px;">${t('7G PROJEKSİYON', '7D PROJECTION')}</div>
-                                <div style="font-size:1.1rem; font-weight:800; color:var(--accent-purple);">${p.weekly_projected_total}</div>
-                            </div>
-                            <div style="padding: 1rem; background: var(--surface); text-align:center;">
-                                <div style="font-size:0.65rem; color:var(--text-muted); margin-bottom:4px;">${t('GÜNLÜK TÜKETİM', 'DAILY AVG')}</div>
-                                <div style="font-size:1.1rem; font-weight:800; color:var(--accent-green);">${p.avg_daily_consumption.toFixed(1)}</div>
-                            </div>
-                        </div>
+      // ===================================
+      // AI PREDICTOR CHART RENDERER
+      // ===================================
+      //   let predictorCharts = {};
+      //   function renderAiPredictor(data) {
+      //     const grid = document.getElementById("ai-predictor-grid");
+      //     if (!grid) return;
+      //     if (!data || !data.products || data.products.length === 0) {
+      //       grid.innerHTML = `<div style="text-align:center;color:var(--text-muted);padding:4pxrem;">${t("Yeterli veri yok — daha fazla stok hareketi eklenince model çalışır.", "Not enough data — model activates after more stock movements.")}</div>`;
+      //       return;
+      //     }
+      //     grid.innerHTML = "";
+      //     data.products.forEach((p, idx) => {
+      //       const confColor =
+      //         p.r2_score >= 0.7
+      //           ? "#34d399"
+      //           : p.r2_score >= 0.4
+      //             ? "#fb923c"
+      //             : "#fb7185";
+      //       const alertBadge = p.alert
+      //         ? `<div style="background:rgba(251,113,133,0.1); border:1px solid rgba(251,113,133,0.3); color:#fb7185; padding:6px 12px; border-radius:30px; font-size:0.75rem; font-weight:700; display:flex; align-items:center; gap:5px;"><span>🚨</span> ${t("Kritik Tedarik Gerekli", "Critical Restock Req.")}</div>`
+      //         : `<div style="background:rgba(52,211,153,0.1); border:1px solid rgba(52,211,153,0.3); color:#34d399; padding:6px 12px; border-radius:30px; font-size:0.75rem; font-weight:700; display:flex; align-items:center; gap:5px;"><span>✅</span> ${t("Stok Güvende", "Stock Secure")}</div>`;
 
-                        <!-- Chart Section -->
-                        <div style="padding: 1.5rem; background: rgba(0,0,0,0.2);">
-                            <canvas id="${canvasId}" style="max-height:160px;"></canvas>
-                        </div>
-                    </div>`;
-            });
+      //       const trendIcon =
+      //         p.trend_direction === "rising"
+      //           ? "▲"
+      //           : p.trend_direction === "falling"
+      //             ? "▼"
+      //             : "●";
+      //       const trendColor =
+      //         p.trend_direction === "rising"
+      //           ? "#34d399"
+      //           : p.trend_direction === "falling"
+      //             ? "#fb7185"
+      //             : "#94a3b8";
+      //       const canvasId = `pred-chart-${idx}`;
+      //       const name = currentLang === "TR" ? p.name_tr : p.name_en;
 
-            // Draw charts
-            setTimeout(() => {
-                data.products.forEach((p, idx) => {
-                    const canvasId = `pred-chart-${idx}`;
-                    const ctx = document.getElementById(canvasId);
-                    if(!ctx) return;
-                    if(predictorCharts[canvasId]) predictorCharts[canvasId].destroy();
-                    const actualLabels = p.actual.map(d => d.day.slice(5));
-                    const actualVals = p.actual.map(d => d.qty);
-                    const projLabels = p.projection.map(d => d.day.slice(5));
-                    const projVals = p.projection.map(d => d.qty);
-                    const allLabels = [...actualLabels, ...projLabels];
-                    const allActual = [...actualVals, ...Array(7).fill(null)];
-                    const allProj = [...Array(7).fill(null), ...projVals];
-                    predictorCharts[canvasId] = new Chart(ctx.getContext('2d'), {
-                        type: 'bar',
-                        data: {
-                            labels: allLabels,
-                            datasets: [
-                                { label: t('Gerçek', 'Actual'), data: allActual, backgroundColor: 'rgba(96,165,250,0.7)', borderRadius: 4, barThickness: 15 },
-                                { label: t('AI Tahmin', 'AI Projection'), data: allProj, backgroundColor: 'rgba(192,132,252,0.6)', borderRadius: 4, barThickness: 15, borderDash: [5, 5] }
-                            ]
-                        },
-                        options: { 
-                            responsive: true, 
-                            maintainAspectRatio: false, 
-                            plugins: { legend: { labels: { color: '#94a3b8', font: { size: 10, weight: 'bold' } } } }, 
-                            scales: { 
-                                x: { grid: { display: false }, ticks: { color: '#64748b', font: { size: 9 } } }, 
-                                y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#64748b', font: { size: 9 } } } 
-                            } 
-                        }
-                    });
-                });
-            }, 100);
-        }
+      //       grid.innerHTML += `
+      //                 <div class="stat-card" style="padding:0; border:1px solid var(--border); background:rgba(30, 41, 59, 0.4); overflow:hidden;">
+      //                     <!-- Header Section -->
+      //                     <div style="padding: 1.5rem; background: rgba(255,255,255,0.02); border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:start;">
+      //                         <div>
+      //                             <h4 style="margin:0; font-size:1.1rem; letter-spacing:-0.02em;">${name}</h4>
+      //                             <div style="margin-top:4px; font-size:0.75rem; font-weight:600; color:var(--text-muted); display:flex; gap:10px;">
+      //                                 <span style="color:${confColor}">R² GÜVEN: ${p.r2_score}</span>
+      //                                 <span style="color:${trendColor}">${trendIcon} ${t("Trend:", "Trend:")} ${p.trend_direction.toUpperCase()}</span>
+      //                             </div>
+      //                         </div>
+      //                         ${alertBadge}
+      //                     </div>
 
-        // ===================================
-        // AUDIT LOG RENDERER
-        // ===================================
-        const ACTION_COLORS = {
-            'LOGIN':            { bg: 'rgba(96,165,250,0.15)', color: '#60a5fa' },
-            'STOCK_IN':         { bg: 'rgba(52,211,153,0.15)', color: '#34d399' },
-            'STOCK_OUT':        { bg: 'rgba(251,113,133,0.15)', color: '#fb7185' },
-            'APPROVE_ONAYLANDI':{ bg: 'rgba(52,211,153,0.2)', color: '#34d399' },
-            'APPROVE_İPTAL':    { bg: 'rgba(251,146,60,0.2)', color: '#fb923c' },
+      //                     <!-- Stats Grid -->
+      //                     <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:1px; background:var(--border);">
+      //                         <div style="padding: 1rem; background: var(--surface); text-align:center;">
+      //                             <div style="font-size:0.65rem; color:var(--text-muted); margin-bottom:4px;">${t("MEVCUT STOK", "CURRENT STOCK")}</div>
+      //                             <div style="font-size:1.1rem; font-weight:800; color:var(--accent-blue);">${p.current_stock}</div>
+      //                         </div>
+      //                         <div style="padding: 1rem; background: var(--surface); text-align:center;">
+      //                             <div style="font-size:0.65rem; color:var(--text-muted); margin-bottom:4px;">${t("7G PROJEKSİYON", "7D PROJECTION")}</div>
+      //                             <div style="font-size:1.1rem; font-weight:800; color:var(--accent-purple);">${p.weekly_projected_total}</div>
+      //                         </div>
+      //                         <div style="padding: 1rem; background: var(--surface); text-align:center;">
+      //                             <div style="font-size:0.65rem; color:var(--text-muted); margin-bottom:4px;">${t("GÜNLÜK TÜKETİM", "DAILY AVG")}</div>
+      //                             <div style="font-size:1.1rem; font-weight:800; color:var(--accent-green);">${p.avg_daily_consumption.toFixed(1)}</div>
+      //                         </div>
+      //                     </div>
+
+      //                     <!-- Chart Section -->
+      //                     <div style="padding: 1.5rem; background: rgba(0,0,0,0.2);">
+      //                         <canvas id="${canvasId}" style="max-height:160px;"></canvas>
+      //                     </div>
+      //                 </div>`;
+      //     });
+
+      //     // Draw charts
+      //     setTimeout(() => {
+      //       data.products.forEach((p, idx) => {
+      //         const canvasId = `pred-chart-${idx}`;
+      //         const ctx = document.getElementById(canvasId);
+      //         if (!ctx) return;
+      //         if (predictorCharts[canvasId]) predictorCharts[canvasId].destroy();
+      //         const actualLabels = p.actual.map((d) => d.day.slice(5));
+      //         const actualVals = p.actual.map((d) => d.qty);
+      //         const projLabels = p.projection.map((d) => d.day.slice(5));
+      //         const projVals = p.projection.map((d) => d.qty);
+      //         const allLabels = [...actualLabels, ...projLabels];
+      //         const allActual = [...actualVals, ...Array(7).fill(null)];
+      //         const allProj = [...Array(7).fill(null), ...projVals];
+      //         predictorCharts[canvasId] = new Chart(ctx.getContext("2d"), {
+      //           type: "bar",
+      //           data: {
+      //             labels: allLabels,
+      //             datasets: [
+      //               {
+      //                 label: t("Gerçek", "Actual"),
+      //                 data: allActual,
+      //                 backgroundColor: "rgba(96,165,250,0.7)",
+      //                 borderRadius: 4,
+      //                 barThickness: 15,
+      //               },
+      //               {
+      //                 label: t("AI Tahmin", "AI Projection"),
+      //                 data: allProj,
+      //                 backgroundColor: "rgba(192,132,252,0.6)",
+      //                 borderRadius: 4,
+      //                 barThickness: 15,
+      //                 borderDash: [5, 5],
+      //               },
+      //             ],
+      //           },
+      //           options: {
+      //             responsive: true,
+      //             maintainAspectRatio: false,
+      //             plugins: {
+      //               legend: {
+      //                 labels: {
+      //                   color: "#94a3b8",
+      //                   font: { size: 10, weight: "bold" },
+      //                 },
+      //               },
+      //             },
+      //             scales: {
+      //               x: {
+      //                 grid: { display: false },
+      //                 ticks: { color: "#64748b", font: { size: 9 } },
+      //               },
+      //               y: {
+      //                 grid: { color: "rgba(255,255,255,0.05)" },
+      //                 ticks: { color: "#64748b", font: { size: 9 } },
+      //               },
+      //             },
+      //           },
+      //         });
+      //       });
+      //     }, 100);
+      //   }
+
+      // ===================================
+      // AUDIT LOG RENDERER
+      // ===================================
+      const ACTION_COLORS = {
+        LOGIN: { bg: "rgba(96,165,250,0.15)", color: "#60a5fa" },
+        STOCK_IN: { bg: "rgba(52,211,153,0.15)", color: "#34d399" },
+        STOCK_OUT: { bg: "rgba(251,113,133,0.15)", color: "#fb7185" },
+        APPROVE_ONAYLANDI: { bg: "rgba(52,211,153,0.2)", color: "#34d399" },
+        APPROVE_İPTAL: { bg: "rgba(251,146,60,0.2)", color: "#fb923c" },
+      };
+      function actionBadge(action) {
+        const c = ACTION_COLORS[action] || {
+          bg: "rgba(255,255,255,0.08)",
+          color: "#94a3b8",
         };
-        function actionBadge(action) {
-            const c = ACTION_COLORS[action] || { bg: 'rgba(255,255,255,0.08)', color: '#94a3b8' };
-            return `<span style="background:${c.bg};color:${c.color};padding:3px 8px;border-radius:6px;font-size:0.75rem;font-weight:bold;">${action}</span>`;
+        return `<span style="background:${c.bg};color:${c.color};padding:3px 8px;border-radius:6px;font-size:0.75rem;font-weight:bold;">${action}</span>`;
+      }
+      function renderAuditLog(data) {
+        const tbody = document.getElementById("audit-tbody");
+        if (!tbody) return;
+        if (!data || !data.logs || data.logs.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--text-muted);">${t("Henüz kayıt yok. Sisteme giriş yapınca loglar otomatik başlar.", "No records yet. Logs begin automatically after first login.")}</td></tr>`;
+          return;
         }
-        function renderAuditLog(data) {
-            const tbody = document.getElementById('audit-tbody');
-            if(!tbody) return;
-            if(!data || !data.logs || data.logs.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--text-muted);">${t('Henüz kayıt yok. Sisteme giriş yapınca loglar otomatik başlar.', 'No records yet. Logs begin automatically after first login.')}</td></tr>`;
-                return;
-            }
-            tbody.innerHTML = data.logs.map(l => `
+        tbody.innerHTML = data.logs
+          .map(
+            (l) => `
                 <tr>
                     <td style="color:var(--text-muted);font-size:0.75rem;">#${l.id}</td>
-                    <td style="font-family:monospace;font-size:0.75rem;color:var(--text-muted);">${l.timestamp.replace('T',' ').slice(0,19)}</td>
+                    <td style="font-family:monospace;font-size:0.75rem;color:var(--text-muted);">${l.timestamp.replace("T", " ").slice(0, 19)}</td>
                     <td><strong>${l.actor}</strong></td>
                     <td style="color:var(--accent-blue);">${l.role}</td>
                     <td>${actionBadge(l.action)}</td>
                     <td style="font-size:0.85rem;">${l.resource}</td>
                     <td style="font-size:0.8rem;color:var(--text-muted);">${l.detail}</td>
-                </tr>`).join('');
+                </tr>`,
+          )
+          .join("");
+      }
+
+      // ===================================
+      // YENİ: POS ENTEGRASYON MİMARİSİ
+      // ===================================
+      async function apiKeyiUret() {
+        const provider = document.getElementById("api-provider-name").value;
+        if (!provider) return alert("Lütfen bir sağlayıcı adı giriniz!");
+
+        const res = await apiIstek("/api/v1/api-keys", "POST", {
+          provider_name: provider,
+        });
+        if (res && res.api_key) {
+          geciciUyariGoster(res.mesaj);
+          document.getElementById("yeni-api-key-sonuc").innerHTML =
+            `İŞTE YENİ GİZLİ ANAHTARINIZ (X-API-KEY):<br/><span style="color:#c084fc; user-select:all;">${res.api_key}</span><br/><span style="font-size:0.8rem; color:#94a3b8">Bunu ilgili POS arayüzüne veya geliştiricisine iletin. Bu anahtar bir daha tam haliyle gösterilmeyecektir.</span>`;
+          document.getElementById("api-provider-name").value = "";
+          verileriCek();
+        } else if (res && (res.hata || res.detail)) {
+          alert(res.hata || res.detail);
+        }
+      }
+
+      async function talepYanitla(id, durum) {
+        const res = await apiIstek("/talep-yanitla/" + id, "PUT", {
+          yeni_durum: durum,
+          yanitlayan_kisi: localStorage.getItem("username"),
+        });
+        if (res && res.mesaj) {
+          geciciUyariGoster(res.mesaj);
+          verileriCek();
+        } else if (res && (res.hata || res.detail))
+          alert(res.hata || res.detail);
+      }
+
+      async function posSatisiYap(menuID, itemName) {
+        // Gerçek 3. Nesil Cafe İşletme Formülü (Bardak Arkası İsmi)
+        const isim = prompt(
+          `☕ ${itemName} Hazırlanıyor!\nLütfen bardak üzerine yazılacak Müşteri Adını giriniz (Zorunlu değil):`,
+          "",
+        );
+        if (isim === null) return; // Müşteri iptali
+
+        // Kredi Kartı Mı Nakit Mi? (Gerçek Kasa Reaksiyonu)
+        const isCredit = confirm(
+          `💳 Ödeme KREDİ KARTI ile mi alındı?\n(Tamam = Kredi Kartı | İptal = Nakit)`,
+        );
+        const odemeYontemi = isCredit ? "Kredi Kartı" : "Nakit";
+
+        const res = await apiIstek("/satis-yap", "POST", {
+          menu_item_id: menuID,
+          adet: 1,
+          musteri_adi: isim,
+          payment_method: odemeYontemi,
+        });
+        if (res && res.mesaj) {
+          // Arayüze Yeşil Toast Mesaj Fırlat. Canlı tablo yenilemesi diğer tüm tarayıcılara WebSocket ile otomatik ulaşır.
+          geciciUyariGoster(`✅ [${odemeYontemi}] KASA FİŞİ: ` + res.mesaj);
+        } else if (res && res.hata) {
+          geciciUyariGoster("KASA HATASI: " + res.hata);
+        }
+      }
+
+      async function vardiyaDevret() {
+        const bildirilenNakit = prompt(
+          "Bugün Kasanızdaki FİZİKSEL NAKİT sayım toplamı kaç TL?",
+          "0",
+        );
+        if (bildirilenNakit === null) return;
+        const bildirilenKart = prompt(
+          "POS Cihazı (Banka) Z-Raporuna göre KREDİ KARTI çekim toplamı kaç TL?",
+          "0",
+        );
+        if (bildirilenKart === null) return;
+
+        const res = await apiIstek("/vardiya-kapat", "POST", {
+          teslim_edilen_nakit: parseFloat(bildirilenNakit),
+          teslim_edilen_kart: parseFloat(bildirilenKart),
+        });
+
+        if (res && res.mesaj) {
+          alert(res.mesaj); // SweetAlert de kullanılabilirdi ama Vanilla JS Promptu en sağlamıdır
+          if (res.fark === 0) {
+            cikisYap(); // Kasa 100% doğruysa hesaptan güvenli çıkış at
+          }
+        } else if (res && res.hata) alert("Vardiya Kapatılamadı: " + res.hata);
+      }
+
+      // KÜTÜPHANE İLE KAMERA KONTROLÜ (BARKOD BÖLÜMÜ)
+      function kamerayiAc() {
+        document.getElementById("startScanBtn").style.display = "none";
+        // HTML5 Qrcode kutusunu aktifleştir
+        html5QrcodeScanner = new Html5QrcodeScanner(
+          "reader",
+          { fps: 10, qrbox: { width: 250, height: 250 } },
+          false,
+        );
+        html5QrcodeScanner.render(onScanSuccess, onScanFailure);
+      }
+
+      // Qr okununca API'ya IN (Giriş) talebi fırlatır! Mükemmel IoT entegrasyonu.
+      async function onScanSuccess(decodedText, decodedResult) {
+        html5QrcodeScanner.clear(); // okuyucuyu durdur
+        document.getElementById("scanResult").innerText =
+          `Barkod Okundu: ${decodedText} Sisteme işleniyor...`;
+
+        // Gerçek bir sistemde Barkod API'den ID olarak sorgulanır, V2 için basitleştirilmiş bir ürün ID simülasyonu:
+        const productIdSecimi = parseInt(decodedText) || 1; // ID okunamazsa default Ürün 1
+
+        const res = await apiIstek("/stok-hareketi", "POST", {
+          product_id: productIdSecimi,
+          quantity: 10,
+          transaction_type: "IN",
+          notes: "Barkod Taraması ile Otomatik Stok Girişi",
+        });
+
+        if (res && res.mesaj)
+          document.getElementById("scanResult").innerText +=
+            "\n✅ Başarılı: " + res.mesaj;
+        else
+          document.getElementById("scanResult").innerText +=
+            "\n❌ İşlem Reddedildi/Hatası!";
+
+        document.getElementById("startScanBtn").style.display = "inline-block";
+        verileriCek();
+      }
+
+      function onScanFailure(error) {
+        /* Background process e.g., scanning loop */
+      }
+
+      // EXCEL DIŞA AKTARIM VE AI FONKSİYONLARI
+      function exportTableToCSV(tbodyId, filename) {
+        let csv = [];
+        let tbody = document.getElementById(tbodyId);
+        if (!tbody) return;
+        let rows = tbody.parentElement.querySelectorAll("tr");
+
+        for (let i = 0; i < rows.length; i++) {
+          let row = [],
+            cols = rows[i].querySelectorAll("td, th");
+          for (let j = 0; j < cols.length; j++)
+            row.push('"' + cols[j].innerText.replace(/"/g, '""') + '"');
+          csv.push(row.join(";"));
         }
 
+        let blob = new Blob(
+          [new Uint8Array([0xef, 0xbb, 0xbf]), csv.join("\n")],
+          { type: "text/csv;charset=utf-8;" },
+        );
+        let url = window.URL.createObjectURL(blob);
+        let a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        a.click();
+        window.URL.revokeObjectURL(url);
+      }
 
+      function toggleTheme() {
+        const body = document.body;
+        body.classList.toggle("light-mode");
+        const isLight = body.classList.contains("light-mode");
+        document.getElementById("themeBtn").innerText = isLight ? "☀️" : "🌙";
+        localStorage.setItem("theme", isLight ? "light" : "dark");
+      }
+      // Load preference
+      if (localStorage.getItem("theme") === "light") toggleTheme();
 
-        // ===================================
-        // YENİ: POS ENTEGRASYON MİMARİSİ
-        // ===================================
-        async function apiKeyiUret() {
-            const provider = document.getElementById("api-provider-name").value;
-            if(!provider) return alert("Lütfen bir sağlayıcı adı giriniz!");
-            
-            const res = await apiIstek("/api/v1/api-keys", "POST", {provider_name: provider});
-            if(res && res.api_key) {
-                geciciUyariGoster(res.mesaj);
-                document.getElementById("yeni-api-key-sonuc").innerHTML = `İŞTE YENİ GİZLİ ANAHTARINIZ (X-API-KEY):<br/><span style="color:#c084fc; user-select:all;">${res.api_key}</span><br/><span style="font-size:0.8rem; color:#94a3b8">Bunu ilgili POS arayüzüne veya geliştiricisine iletin. Bu anahtar bir daha tam haliyle gösterilmeyecektir.</span>`;
-                document.getElementById("api-provider-name").value = "";
-                verileriCek();
-            } else if(res && (res.hata || res.detail)) {
-                alert(res.hata || res.detail);
-            }
+      function exportDashboardToPDF() {
+        const element = document.getElementById("tab-dashboard");
+        // PDF için geçici olarak Light Mode'a zorla (Opsiyonel, eğer silik çıkıyorsa)
+        const wasLight = document.body.classList.contains("light-mode");
+        if (!wasLight) document.body.classList.add("light-mode");
+
+        const opt = {
+          margin: [0.2, 0.2],
+          filename: `luminal_enterprise_report_${new Date().toISOString().slice(0, 10)}.pdf`,
+          image: { type: "jpeg", quality: 1.0 },
+          html2canvas: {
+            scale: 4,
+            useCORS: true,
+            letterRendering: true,
+            backgroundColor: "#ffffff",
+          },
+          jsPDF: { unit: "in", format: "a4", orientation: "portrait" },
+        };
+
+        html2pdf()
+          .set(opt)
+          .from(element)
+          .save()
+          .then(() => {
+            if (!wasLight) document.body.classList.remove("light-mode");
+          });
+      }
+
+      async function onaylaTedarik(productId, qty, supplier) {
+        if (
+          !confirm(
+            `${supplier} için ${qty} adet sipariş onaylanacak. Emin misiniz?`,
+          )
+        )
+          return;
+
+        const res = await apiIstek("/tedarik-siparis-onayla", "POST", {
+          product_id: productId,
+          quantity: qty,
+          supplier_name: supplier,
+        });
+
+        if (res && res.mesaj) {
+          geciciUyariGoster("✅ " + res.mesaj);
+          verileriCek();
+        } else {
+          alert("Hata: Sipariş onaylanamadı.");
         }
+      }
 
-        async function talepYanitla(id, durum) {
-            const res = await apiIstek("/talep-yanitla/" + id, "PUT", {yeni_durum: durum, yanitlayan_kisi: localStorage.getItem("username")});
-            if(res && res.mesaj) { geciciUyariGoster(res.mesaj); verileriCek(); }
-            else if(res && (res.hata || res.detail)) alert(res.hata || res.detail);
-        }
+      function aiRaporOlustur() {
+        let modal = document.getElementById("aiModal");
+        modal.style.display = "block";
+        let textElem = document.getElementById("aiModalContent");
 
-        async function posSatisiYap(menuID, itemName) {
-            // Gerçek 3. Nesil Cafe İşletme Formülü (Bardak Arkası İsmi)
-            const isim = prompt(`☕ ${itemName} Hazırlanıyor!\nLütfen bardak üzerine yazılacak Müşteri Adını giriniz (Zorunlu değil):`, "");
-            if (isim === null) return; // Müşteri iptali
-            
-            // Kredi Kartı Mı Nakit Mi? (Gerçek Kasa Reaksiyonu)
-            const isCredit = confirm(`💳 Ödeme KREDİ KARTI ile mi alındı?\n(Tamam = Kredi Kartı | İptal = Nakit)`);
-            const odemeYontemi = isCredit ? "Kredi Kartı" : "Nakit";
+        textElem.setAttribute(
+          "data-tr",
+          "Sistemin M2M akışı, SKT uyarıları ve Ciro verileri derin işleniyor...",
+        );
+        textElem.setAttribute(
+          "data-en",
+          "Processing M2M flows, expiration alerts, and revenue data deeply...",
+        );
+        textElem.innerText = t(
+          textElem.getAttribute("data-tr"),
+          textElem.getAttribute("data-en"),
+        );
 
-            const res = await apiIstek("/satis-yap", "POST", { menu_item_id: menuID, adet: 1, musteri_adi: isim, payment_method: odemeYontemi });
-            if(res && res.mesaj) {
-                // Arayüze Yeşil Toast Mesaj Fırlat. Canlı tablo yenilemesi diğer tüm tarayıcılara WebSocket ile otomatik ulaşır.
-                geciciUyariGoster(`✅ [${odemeYontemi}] KASA FİŞİ: ` + res.mesaj);
-            } else if (res && res.hata) {
-                geciciUyariGoster("KASA HATASI: " + res.hata);
-            }
-        }
-        
-        async function vardiyaDevret() {
-            const bildirilenNakit = prompt("Bugün Kasanızdaki FİZİKSEL NAKİT sayım toplamı kaç TL?", "0");
-            if (bildirilenNakit === null) return;
-            const bildirilenKart = prompt("POS Cihazı (Banka) Z-Raporuna göre KREDİ KARTI çekim toplamı kaç TL?", "0");
-            if (bildirilenKart === null) return;
-            
-            const res = await apiIstek("/vardiya-kapat", "POST", { 
-                teslim_edilen_nakit: parseFloat(bildirilenNakit), 
-                teslim_edilen_kart: parseFloat(bildirilenKart) 
-            });
-            
-            if(res && res.mesaj) {
-                alert(res.mesaj); // SweetAlert de kullanılabilirdi ama Vanilla JS Promptu en sağlamıdır
-                if (res.fark === 0) {
-                    cikisYap(); // Kasa 100% doğruysa hesaptan güvenli çıkış at
-                }
-            } else if (res && res.hata) alert("Vardiya Kapatılamadı: " + res.hata);
-        }
+        setTimeout(() => {
+          let fireTutar =
+            document.getElementById("fire-zarari").innerText || "?";
+          let ciro = document.getElementById("gunluk-ciro").innerText || "?";
 
-        // KÜTÜPHANE İLE KAMERA KONTROLÜ (BARKOD BÖLÜMÜ)
-        function kamerayiAc() {
-            document.getElementById("startScanBtn").style.display = 'none';
-            // HTML5 Qrcode kutusunu aktifleştir
-            html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: {width: 250, height: 250} }, false);
-            html5QrcodeScanner.render(onScanSuccess, onScanFailure);
-        }
+          let tahminTR = window.aiTahminTextTR || "Belirsiz Dağılım";
+          let tahminEN = window.aiTahminTextEN || "Unknown Distribution";
 
-        // Qr okununca API'ya IN (Giriş) talebi fırlatır! Mükemmel IoT entegrasyonu.
-        async function onScanSuccess(decodedText, decodedResult) {
-            html5QrcodeScanner.clear(); // okuyucuyu durdur
-            document.getElementById("scanResult").innerText = `Barkod Okundu: ${decodedText} Sisteme işleniyor...`;
-            
-            // Gerçek bir sistemde Barkod API'den ID olarak sorgulanır, V2 için basitleştirilmiş bir ürün ID simülasyonu:
-            const productIdSecimi = parseInt(decodedText) || 1; // ID okunamazsa default Ürün 1
-            
-            const res = await apiIstek("/stok-hareketi", "POST", {
-                product_id: productIdSecimi,
-                quantity: 10,
-                transaction_type: "IN",
-                notes: "Barkod Taraması ile Otomatik Stok Girişi"
-            });
+          let repTR = `Kurumsal Lojistik Modeli Analizi Tamamlandı. ✅<br><br>Günün başarılı personelleri sayesinde üretilen güçlü ciro <b>${ciro}</b> olarak tespit edilirken, LIFO döngüsü hatalarından veya raf ömründen kaynaklanan aylık depo fire zayiatı <b>${fireTutar}</b> seviyelerinde tutuluyor.<br><br><b>🚨 Tahmine Dayalı Tedarik Uyarısı:</b> Sistem regülasyon trendlerine göre tedarik edilmesi gereken en akıllı yatırım <b>"${tahminTR}"</b> kaleminde görülmektedir. İlgili webhook logları satın alma departmanına iletilebilir.`;
+          let repEN = `Enterprise Logistics Model Analysis Complete. ✅<br><br>Daily revenue generated by top-performing staff is <b>${ciro}</b>, while monthly warehouse spoilage loss from shelf-life expiration or LIFO discrepancies remains successfully trapped at <b>${fireTutar}</b>.<br><br><b>🚨 Predictive Supply Warning:</b> Based on AI consumption trends, the smartest predictive restock investment is projected on <b>"${tahminEN}"</b>. Related webhook logs can be immediately forwarded to procurement.`;
 
-            if(res && res.mesaj) document.getElementById("scanResult").innerText += "\n✅ Başarılı: " + res.mesaj;
-            else document.getElementById("scanResult").innerText += "\n❌ İşlem Reddedildi/Hatası!";
-            
-            document.getElementById("startScanBtn").style.display = 'inline-block';
-            verileriCek();
-        }
+          textElem.setAttribute("data-tr", repTR);
+          textElem.setAttribute("data-en", repEN);
+          textElem.innerHTML = currentLang === "TR" ? repTR : repEN;
+        }, 2500);
+      }
 
-        function onScanFailure(error) { /* Background process e.g., scanning loop */ }
-
-        // EXCEL DIŞA AKTARIM VE AI FONKSİYONLARI
-        function exportTableToCSV(tbodyId, filename) {
-            let csv = [];
-            let tbody = document.getElementById(tbodyId);
-            if(!tbody) return;
-            let rows = tbody.parentElement.querySelectorAll("tr");
-            
-            for (let i = 0; i < rows.length; i++) {
-                let row = [], cols = rows[i].querySelectorAll("td, th");
-                for (let j = 0; j < cols.length; j++) 
-                    row.push('"' + cols[j].innerText.replace(/"/g, '""') + '"');
-                csv.push(row.join(";"));
-            }
-            
-            let blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csv.join("\n")], {type: "text/csv;charset=utf-8;"});
-            let url = window.URL.createObjectURL(blob);
-            let a = document.createElement("a");
-            a.href = url; a.download = filename;
-            a.click();
-            window.URL.revokeObjectURL(url);
-        }
-
-        function toggleTheme() {
-            const body = document.body;
-            body.classList.toggle('light-mode');
-            const isLight = body.classList.contains('light-mode');
-            document.getElementById('themeBtn').innerText = isLight ? '☀️' : '🌙';
-            localStorage.setItem('theme', isLight ? 'light' : 'dark');
-        }
-        // Load preference
-        if(localStorage.getItem('theme') === 'light') toggleTheme();
-
-        function exportDashboardToPDF() {
-            const element = document.getElementById('tab-dashboard');
-            // PDF için geçici olarak Light Mode'a zorla (Opsiyonel, eğer silik çıkıyorsa)
-            const wasLight = document.body.classList.contains('light-mode');
-            if(!wasLight) document.body.classList.add('light-mode');
-            
-            const opt = {
-                margin: [0.2, 0.2],
-                filename: `luminal_enterprise_report_${new Date().toISOString().slice(0,10)}.pdf`,
-                image: { type: 'jpeg', quality: 1.0 },
-                html2canvas: { 
-                    scale: 4, 
-                    useCORS: true, 
-                    letterRendering: true,
-                    backgroundColor: '#ffffff'
-                },
-                jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' }
-            };
-            
-            html2pdf().set(opt).from(element).save().then(() => {
-                if(!wasLight) document.body.classList.remove('light-mode');
-            });
-        }
-
-        async function onaylaTedarik(productId, qty, supplier) {
-            if(!confirm(`${supplier} için ${qty} adet sipariş onaylanacak. Emin misiniz?`)) return;
-            
-            const res = await apiIstek("/tedarik-siparis-onayla", "POST", {
-                product_id: productId,
-                quantity: qty,
-                supplier_name: supplier
-            });
-            
-            if(res && res.mesaj) {
-                geciciUyariGoster("✅ " + res.mesaj);
-                verileriCek();
-            } else {
-                alert("Hata: Sipariş onaylanamadı.");
-            }
-        }
-
-        function aiRaporOlustur() {
-            let modal = document.getElementById("aiModal");
-            modal.style.display = "block";
-            let textElem = document.getElementById("aiModalContent");
-            
-            textElem.setAttribute('data-tr', 'Sistemin M2M akışı, SKT uyarıları ve Ciro verileri derin işleniyor...');
-            textElem.setAttribute('data-en', 'Processing M2M flows, expiration alerts, and revenue data deeply...');
-            textElem.innerText = t(textElem.getAttribute('data-tr'), textElem.getAttribute('data-en'));
-            
-            setTimeout(() => {
-                let fireTutar = document.getElementById("fire-zarari").innerText || "?";
-                let ciro = document.getElementById("gunluk-ciro").innerText || "?";
-                
-                let tahminTR = window.aiTahminTextTR || "Belirsiz Dağılım";
-                let tahminEN = window.aiTahminTextEN || "Unknown Distribution";
-                
-                let repTR = `Kurumsal Lojistik Modeli Analizi Tamamlandı. ✅<br><br>Günün başarılı personelleri sayesinde üretilen güçlü ciro <b>${ciro}</b> olarak tespit edilirken, LIFO döngüsü hatalarından veya raf ömründen kaynaklanan aylık depo fire zayiatı <b>${fireTutar}</b> seviyelerinde tutuluyor.<br><br><b>🚨 Tahmine Dayalı Tedarik Uyarısı:</b> Sistem regülasyon trendlerine göre tedarik edilmesi gereken en akıllı yatırım <b>"${tahminTR}"</b> kaleminde görülmektedir. İlgili webhook logları satın alma departmanına iletilebilir.`;
-                let repEN = `Enterprise Logistics Model Analysis Complete. ✅<br><br>Daily revenue generated by top-performing staff is <b>${ciro}</b>, while monthly warehouse spoilage loss from shelf-life expiration or LIFO discrepancies remains successfully trapped at <b>${fireTutar}</b>.<br><br><b>🚨 Predictive Supply Warning:</b> Based on AI consumption trends, the smartest predictive restock investment is projected on <b>"${tahminEN}"</b>. Related webhook logs can be immediately forwarded to procurement.`;
-                
-                textElem.setAttribute('data-tr', repTR);
-                textElem.setAttribute('data-en', repEN);
-                textElem.innerHTML = currentLang === 'TR' ? repTR : repEN;
-            }, 2500);
-        }
-
-        // --- DASHBOARD CHART.JS ---
-        function cizgiGrafikCiz(veriler) {
-            const ctx = document.getElementById('lineChart');
-            if (!ctx) return;
-            if(lineChartInstance) lineChartInstance.destroy();
-            let dLoc = currentLang === 'TR' ? 'tr-TR' : 'en-US';
-            const et = veriler.map(v => new Date(v.tarih).toLocaleDateString(dLoc, {weekday:'short'}));
-            const dg = veriler.map(v => v.gunluk_cikis_adeti);
-            Chart.defaults.color = '#94a3b8';
-            lineChartInstance = new Chart(ctx.getContext('2d'), { type:'line', data:{labels:et, datasets:[{label:t('Lojistik Çıkış', 'Logistics Outflow'), data:dg, borderColor:'#34d399', tension:0.4, fill:true, backgroundColor:'rgba(52, 211, 153, 0.1)'}]}, options:{responsive:true, maintainAspectRatio:false} });
-        }
-        function pastaGrafikCiz(veriler) {
-            const ctx = document.getElementById('pieChart');
-            if(!ctx) return;
-            if(pieChartInstance) pieChartInstance.destroy();
-            pieChartInstance = new Chart(ctx.getContext('2d'), { type:'doughnut', data:{labels:veriler.map(v => currentLang === 'TR' ? v.name_tr : (v.name_en || v.name_tr)), datasets:[{data:veriler.map(v=>v.toplam_sevk), backgroundColor:['#34d399','#60a5fa','#fb7185','#c084fc','#facc15'], borderWidth:0}]}, options:{responsive:true, maintainAspectRatio:false} });
-        }
+      // --- DASHBOARD CHART.JS ---
+      function cizgiGrafikCiz(veriler) {
+        const ctx = document.getElementById("lineChart");
+        if (!ctx) return;
+        if (lineChartInstance) lineChartInstance.destroy();
+        let dLoc = currentLang === "TR" ? "tr-TR" : "en-US";
+        const et = veriler.map((v) =>
+          new Date(v.tarih).toLocaleDateString(dLoc, { weekday: "short" }),
+        );
+        const dg = veriler.map((v) => v.gunluk_cikis_adeti);
+        Chart.defaults.color = "#94a3b8";
+        lineChartInstance = new Chart(ctx.getContext("2d"), {
+          type: "line",
+          data: {
+            labels: et,
+            datasets: [
+              {
+                label: t("Lojistik Çıkış", "Logistics Outflow"),
+                data: dg,
+                borderColor: "#34d399",
+                tension: 0.4,
+                fill: true,
+                backgroundColor: "rgba(52, 211, 153, 0.1)",
+              },
+            ],
+          },
+          options: { responsive: true, maintainAspectRatio: false },
+        });
+      }
+      function pastaGrafikCiz(veriler) {
+        const ctx = document.getElementById("pieChart");
+        if (!ctx) return;
+        if (pieChartInstance) pieChartInstance.destroy();
+        pieChartInstance = new Chart(ctx.getContext("2d"), {
+          type: "doughnut",
+          data: {
+            labels: veriler.map((v) =>
+              currentLang === "TR" ? v.name_tr : v.name_en || v.name_tr,
+            ),
+            datasets: [
+              {
+                data: veriler.map((v) => v.toplam_sevk),
+                backgroundColor: [
+                  "#34d399",
+                  "#60a5fa",
+                  "#fb7185",
+                  "#c084fc",
+                  "#facc15",
+                ],
+                borderWidth: 0,
+              },
+            ],
+          },
+          options: { responsive: true, maintainAspectRatio: false },
+        });
+      }
     </script>
-</body>
+  </body>
 </html>

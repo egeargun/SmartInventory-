@@ -14,15 +14,28 @@ class ProductCreate(BaseModel):
     name_en: str
     description_tr: Optional[str] = None
     description_en: Optional[str] = None
-    category_id: int
-    supplier_id: int
-    unit_cost: float
-    unit_price: float
-    current_stock: int
-    reorder_point: int
-    abc_class: str
+    category_id: Optional[int] = None
+    supplier_id: Optional[int] = None
+    unit_cost: float = 0.0
+    unit_price: float = 0.0
+    current_stock: int = 0
+    reorder_point: int = 10
+    abc_class: str = "C"
     expiration_date: Optional[str] = None # SKT (Termos için boş, Süt için dolu)
     warehouse_location: str = "Ana Depo"
+
+class ProductUpdate(BaseModel):
+    sku: Optional[str] = None
+    name_tr: Optional[str] = None
+    name_en: Optional[str] = None
+    category_id: Optional[int] = None
+    supplier_id: Optional[int] = None
+    unit_cost: Optional[float] = None
+    unit_price: Optional[float] = None
+    current_stock: Optional[int] = None
+    reorder_point: Optional[int] = None
+    expiration_date: Optional[str] = None
+    warehouse_location: Optional[str] = None
 
 # 3. Stok Hareketi Şablonu (Kim, Ne Zaman, Ne Yaptı)
 class StockTransaction(BaseModel):
@@ -39,26 +52,3 @@ class TalepYaniti(BaseModel):
     yeni_durum: str # 'ONAYLANDI' veya 'İPTAL'
     yanitlayan_kisi: str = "Depo Müdürü"
 
-# 5. POS Entegrasyonu (Webhook) Şablonları
-class WebhookSaleItem(BaseModel):
-    external_product_id: str
-    quantity: int
-    price: float
-
-class WebhookSalePayload(BaseModel):
-    pos_provider: str
-    receipt_id: str
-    items: List[WebhookSaleItem]
-    timestamp: Optional[str] = None
-
-class ApiKeyCreate(BaseModel):
-    provider_name: str
-
-# 6. QR Müşteri (B2C) Sipariş Talepleri
-class QROrderItem(BaseModel):
-    menu_item_id: int
-    quantity: int = 1
-
-class QROrderRequest(BaseModel):
-    table_id: int
-    items: List[QROrderItem]

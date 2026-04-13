@@ -2,8 +2,8 @@ from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from fastapi import Depends, HTTPException, status, Security, Request
-from fastapi.security import OAuth2PasswordBearer, APIKeyHeader
+from fastapi import Depends, HTTPException, status, Request
+from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 import database
 import models
@@ -83,26 +83,8 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
 # JWT Role Checker (Enterprise Seviye)
 def role_required(allowed_roles: list[str]):
     def role_checker(current_user: models.User = Depends(get_current_user)):
-        if current_user.role not in allowed_roles and "Admin" not in allowed_roles:
+        if current_user.role not in allowed_roles and current_user.role != "Admin":
             raise HTTPException(status_code=403, detail=f"Oturum izni yetersiz. Gereken roller: {', '.join(allowed_roles)}")
         return current_user
     return role_checker
 
-# M2M (Makineler Arası) İletişim İçin API Key Güvenlik Duvarı
-api_key_header = APIKeyHeader(name="x-api-key", auto_error=False)
-
-def verify_api_key(api_key: str = Security(api_key_header), db: Session = Depends(database.get_db)):
-    if not api_key:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Header'da 'x-api-key' kimlik tespiti yapılamadı."
-        )
-    
-    # Veritabanında Key'i kontrol et
-    key_record = db.query(models.ApiKey).filter(models.ApiKey.api_key == api_key).first()
-    if not key_record:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Geçersiz (Unauthorized) API Anahtarı."
-        )
-    return key_record

@@ -4,3 +4,55 @@ json => 127.0.0.1:8000
 terminalden başlatmak için
 uvicorn main:app --reload
 
+
+Başlatmak için
+# 1. Go to the project folder
+cd /Users/kaan/Documents/SmartInventory-
+
+# 2. Activate the virtual environment
+source venv/bin/activate
+
+# 3. Start the server
+uvicorn main:app --reload
+That's it. You'll see:
+
+
+INFO:     Uvicorn running on http://127.0.0.1:8000
+INFO:     Application startup complete.
+
+
+!!!
+
+serverı durdurmak için
+kill $(lsof -ti:8000) 2>/dev/null && echo "Stopped" || echo "Nothing running on 8000"
+
+
+
+12.04.2026 yapılan değişiklikler ⬇⬇⬇
+Frontend (index.html)
+
+Removed sidebar items: POS Integration, AI Predictor, Barcode Scanner, POS Screen
+Added "Bekleyen Kullanıcılar" admin nav + tab
+Removed obsolete dashboard cards (günlük ciro, günün baristası) and tab sections
+Added applyRoleVisibility(role): Admin sees all; Depo Müdürü hides nav-audit, nav-talepler, nav-pending-users; Barista kept restricted
+Added onaylaKullanici / reddetKullanici handlers
+Removed html5-qrcode script tag
+Backend
+
+models.py: added is_approved on User
+main.py: /token rejects unapproved non-admins; /register sets is_approved=0 for non-admins; new endpoints /pending-users, /approve-user/{id}, /reject-user/{id}; startup migration adds the column and marks existing users approved
+
+ikinci değişiklikler
+main.py:389-391: added /sw.js route to fix 404.
+main.py:430-432: urun_sil now cascades — deletes child InventoryTransaction and SupplyOrderApproval rows before the product, resolving the FK 1451 error.
+index.html:1160-1193: modal fields now have top-left labels, SKU/Ad/Raf use <datalist> suggestions, Mal Grubu and Tedarikçi are <select> dropdowns from existing data.
+index.html:1540-1561: new _ssPopulateChoices() hydrates selects/datalists from the product cache on open.
+LIFO Hedef (SKT), Bakiye, Değer (Fiyat), and Maliyet remain free-entry numeric/date inputs as requested.
+
+üçüncü değişiklikler
+Backend /urunler now returns category_id, supplier_id, unit_cost, reorder_point, abc_class — this is why the Tedarikçi Şirket dropdown was empty.
+ProductCreate: category_id / supplier_id are now Optional with defaults — so create no longer 422s on missing IDs.
+/sw.js route and cascading delete (from the prior turn) are in place.
+Modal: single-language labels via data-tr/data-en, including the "Ürün Adı (Alternatif Dil)" field, Cancel/Save buttons, and modal title. Language toggle now also reloads the Stok Sipariş table so Edit/Sil buttons re-render.
+SKU autofill: picking an existing SKU auto-populates name, category, supplier, warehouse, prices, stock, SKT, ABC, and switches the modal into edit mode.
+Error surfacing: save and delete now show the real backend error (e.g., 422 field, 1451 FK) instead of a generic "İşlem başarısız".

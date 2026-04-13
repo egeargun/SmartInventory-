@@ -1,22 +1,28 @@
 from fastapi import FastAPI, Depends, HTTPException, status, WebSocket, WebSocketDisconnect, Request, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_, text
 from typing import List, Dict, Optional
+import asyncio
 import datetime
+import io
 import logging
 import os
 from contextlib import asynccontextmanager
-import numpy as np
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import r2_score
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from pydantic import BaseModel
-import secrets
+import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment
+from openpyxl.utils import get_column_letter
+from reportlab.lib.pagesizes import A4
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, HRFlowable
+from reportlab.lib.units import cm
 from apscheduler.schedulers.background import BackgroundScheduler
 from notifications import send_supplier_email, trigger_stock_webhook, send_admin_report
 
@@ -26,91 +32,33 @@ logging.basicConfig(
 )
 logger = logging.getLogger("akilli_envanter_api")
 
+# --- UYGULAMA SABİTLERİ ---
+SKT_ALERT_DAYS = 7                    # SKT yaklaşma uyarı eşiği (gün)
+AUDIT_LOG_ARCHIVE_DAYS = 7            # Denetim kaydı arşiv süresi (gün)
+REPORTING_WINDOW_DAYS = 30            # Standart raporlama penceresi (gün)
+EWMA_ALPHA = 0.3                      # EWMA talep tahmini alfa katsayısı
+
 import models
 import schemas
 from database import engine, get_db
 from auth import (
     verify_password, get_password_hash, create_access_token,
     create_refresh_token, decode_refresh_token,
-    role_required, get_current_user, verify_api_key
+    role_required, get_current_user,
 )
-from schemas import StockTransaction, ProductCreate, TalepYaniti, WebhookSalePayload, ApiKeyCreate, QROrderRequest
+from schemas import StockTransaction, ProductCreate, ProductUpdate, TalepYaniti
 
 
-
-class SatisTalebi(BaseModel):
-    menu_item_id: int
-    adet: int
-    musteri_adi: Optional[str] = None
-    payment_method: str = "Nakit"
-    customer_id: Optional[int] = None
-
-class TableOrderAdd(BaseModel):
-    table_id: int
-    menu_item_id: int
-    quantity: int
-    is_ikram: bool = False  # True ise fiyatı 0 (sıfır) kaydedilir
-
-class BulkTableOrderRequest(BaseModel):
-    table_id: int
-    items: List[dict] # [{"menu_item_id": 1, "quantity": 1, "is_ikram": false}]
-
-class CustomerLookup(BaseModel):
-    phone_number: str
-    name: Optional[str] = None
-
-class UpsellRequest(BaseModel):
-    current_item_ids: List[int]
-
-class TableLocationUpdate(BaseModel):
-    table_id: int
-    x_pos: float
-    y_pos: float
-
-class CheckoutRequest(BaseModel):
-    table_id: Optional[int] = None # Null ise Paket Servis
-    payment_method: str = "Nakit"  # Tamamı bu yöntemle ödeniyorsa
-    amount_cash: float = 0.0       # Parçalı (Split) ödeme Nakit tutarı
-    amount_card: float = 0.0       # Parçalı (Split) ödeme Kart tutarı
-    discount: float = 0.0          # İndirim tutarı (TL)
-    customer_id: Optional[int] = None # Z-Raporunu CRM sadakat hesabına işler
-    points_used: int = 0           # Eğer Müşteri kahve/indirim kazandıysa harcanan puan
-    use_free_coffee: bool = False  # 9 Damga hediye kahve uygulansın mı?
-
-class TableMoveRequest(BaseModel):
-    from_table_id: int
-    to_table_id: int
-
-class ExpenseCreate(BaseModel):
-    category: str
-    amount: float
-    description: str
-
-class WastageCreate(BaseModel):
-    product_id: int
-    quantity: float
-    reason: str
-
-class SettingsUpdate(BaseModel):
-    cafe_name: str
-    tax_rate: float
-    currency: str = "TL"
-    address: Optional[str] = None
-
-class MenuItemCreate(BaseModel):
-    name: str
-    price: float
-    category: str
-    image_emoji: str = "☕"
-
-class VardiyaKapat(BaseModel):
-    teslim_edilen_nakit: float
-    teslim_edilen_kart: float
 
 class RegisterUser(BaseModel):
     username: str
     password: str
     role: str = "Barista"
+
+class SupplyApprovalRequest(BaseModel):
+    product_id: int
+    quantity: float
+    supplier_name: Optional[str] = None
 
 # Not: Veritabanı tabloları artık Alembic (Migrations) ile yönetiliyor.
 # Manuel oluşturma (create_all) devri enterprise mimaride kapandı.
@@ -131,7 +79,7 @@ def daily_system_check():
     try:
         # 1. SKT Yaklaşanlar (7 gün)
         bugun = datetime.date.today()
-        kritik_tarih = bugun + datetime.timedelta(days=7)
+        kritik_tarih = bugun + datetime.timedelta(days=SKT_ALERT_DAYS)
         skt_yaklasanlar = db.query(models.Product).filter(
             models.Product.expiration_date <= kritik_tarih,
             models.Product.current_stock > 0
@@ -154,8 +102,6 @@ def daily_system_check():
                 for u in kritik_stoklar:
                     report += f"- {u.name_tr} (Mevcut: {u.current_stock}, Eşik: {u.reorder_point})\n"
             
-            # Admin'e gönder (Arka planda çalışır)
-            import asyncio
             asyncio.run(send_admin_report(f"🏛️ Envanter Raporu - {bugun}", report))
             logger.info("Günlük sistem raporu hazırlandı ve kuyruğa alındı.")
 
@@ -168,7 +114,7 @@ def archive_old_audit_logs():
     """Her gece 01:00'de 7 günden eski denetim kayıtlarını arşivler (siler değil, gizler)."""
     db = next(get_db())
     try:
-        cutoff = datetime.datetime.utcnow() - datetime.timedelta(days=7)
+        cutoff = datetime.datetime.utcnow() - datetime.timedelta(days=AUDIT_LOG_ARCHIVE_DAYS)
         eski_kayitlar = db.query(models.AuditLog).filter(
             models.AuditLog.timestamp < cutoff,
             models.AuditLog.is_archived == 0
@@ -183,23 +129,25 @@ def archive_old_audit_logs():
     finally:
         db.close()
 
+def _ensure_is_approved_column():
+    """Lightweight migration: app_users.is_approved sütununu ekler, mevcut kullanıcıları onaylı sayar."""
+    from sqlalchemy import text
+    from database import engine
+    try:
+        with engine.begin() as conn:
+            cols = conn.execute(text("SHOW COLUMNS FROM app_users LIKE 'is_approved'")).fetchall()
+            if not cols:
+                conn.execute(text("ALTER TABLE app_users ADD COLUMN is_approved INT DEFAULT 1"))
+                conn.execute(text("UPDATE app_users SET is_approved = 1"))
+                logger.info("app_users.is_approved sütunu eklendi; mevcut kullanıcılar onaylı olarak işaretlendi.")
+    except Exception as e:
+        logger.error(f"is_approved migration hatası: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    _ensure_is_approved_column()
     logger.info("İş Zekası Envanter API başarıyla başlatıldı.")
-    # 2. POS Masalarını Hazırla (17 Masa)
-    try:
-        db = next(get_db())
-        count = db.query(models.Table).count()
-        if count < 17:
-            for i in range(1, 18):
-                exists = db.query(models.Table).filter(models.Table.name == f"Masa {i}").first()
-                if not exists:
-                    db.add(models.Table(name=f"Masa {i}"))
-            db.commit()
-            logger.info("17 Adet POS Masası oluşturuldu.")
-    except Exception as e:
-        logger.error(f"Masa kurulum hatası: {str(e)}")
-
     yield
     scheduler.shutdown()
     logger.info("API kapatılıyor.")
@@ -235,6 +183,27 @@ def get_client_ip(request: Request) -> str:
     """Proxy arkasında bile doğru IP adresini al (X-Forwarded-For)."""
     forwarded = request.headers.get("X-Forwarded-For")
     return forwarded.split(",")[0].strip() if forwarded else (request.client.host if request.client else "unknown")
+
+# --- YARDIMCI: DENETİM KAYDI OLUŞTUR ---
+def _log_audit(
+    db: Session,
+    actor: str,
+    role: str,
+    action: str,
+    resource: str = None,
+    detail: str = None,
+    ip_address: str = None,
+) -> None:
+    """Denetim kaydı yazar. Hata olursa sessizce geçmek yerine loglar."""
+    try:
+        log = models.AuditLog(
+            actor=actor, role=role, action=action,
+            resource=resource, detail=detail, ip_address=ip_address,
+        )
+        db.add(log)
+        db.commit()
+    except Exception as e:
+        logger.error(f"Audit log yazılamadı [{action}]: {e}")
 
 # --- WEBSOCKET CANLI YAYIN (BROADCAST) YÖNETİCİSİ ---
 class ConnectionManager:
@@ -279,36 +248,27 @@ def login_for_access_token(request: Request, form_data: dict, db: Session = Depe
     
     user = db.query(models.User).filter(models.User.username == username).first()
     if not user or not verify_password(password, user.hashed_password):
-        # Başarısız giriş denemeleri de loglanır!
-        try:
-            log = models.AuditLog(
-                actor=username or "unknown", role="-",
-                action="LOGIN_FAILED",
-                detail="Yanlış şifre denendi.",
-                ip_address=ip
-            )
-            db.add(log); db.commit()
-        except Exception:
-            pass
+        _log_audit(db, actor=username or "unknown", role="-",
+                   action="LOGIN_FAILED", detail="Yanlış şifre denendi.", ip_address=ip)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Kullanıcı adı veya şifre hatalı. Lütfen tekrar deneyiniz.",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    if user.role != "Admin" and not getattr(user, "is_approved", 0):
+        _log_audit(db, actor=user.username, role=user.role,
+                   action="LOGIN_BLOCKED", detail="Hesap admin onayı bekliyor.", ip_address=ip)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Hesabınız henüz admin tarafından onaylanmadı. Lütfen onay bekleyiniz.",
+        )
     
     access_token  = create_access_token(data={"sub": user.username})
     refresh_token = create_refresh_token(data={"sub": user.username})
 
-    # Başarılı giriş audit logı
-    try:
-        log = models.AuditLog(
-            actor=user.username, role=user.role,
-            action="LOGIN", detail="JWT access + refresh token issued.",
-            ip_address=ip
-        )
-        db.add(log); db.commit()
-    except Exception:
-        pass
+    _log_audit(db, actor=user.username, role=user.role,
+               action="LOGIN", detail="JWT access + refresh token issued.", ip_address=ip)
 
     return {
         "access_token": access_token,
@@ -341,21 +301,58 @@ def refresh_access_token(request: Request, body: dict, db: Session = Depends(get
 def register_user(user_data: RegisterUser, db: Session = Depends(get_db)):
     mevcut = db.query(models.User).filter(models.User.username == user_data.username).first()
     if mevcut:
-        return {"hata": "Bu kullanıcı adı sistemde zaten kayıtlı! Lütfen farklı bir isim seçin."}
-        
+        raise HTTPException(status_code=409, detail="Bu kullanıcı adı sistemde zaten kayıtlı! Lütfen farklı bir isim seçin.")
+
     role = user_data.role if user_data.role in ["Admin", "Depo Müdürü", "Barista"] else "Barista"
+    # Admin dışındaki tüm yeni kayıtlar onay bekler.
+    is_approved = 1 if role == "Admin" else 0
     try:
         yeni_kullanici = models.User(
             username=user_data.username,
             hashed_password=get_password_hash(user_data.password),
-            role=role
+            role=role,
+            is_approved=is_approved,
         )
         db.add(yeni_kullanici)
         db.commit()
-        return {"mesaj": f"Tebrikler! Sisteme '{user_data.username}' rolüyle '{role}' olarak kaydedildiniz. Giriş yapabilirsiniz."}
+        if is_approved:
+            return {"mesaj": f"Sisteme '{user_data.username}' rolüyle '{role}' olarak kaydedildiniz. Giriş yapabilirsiniz."}
+        return {"mesaj": f"Kayıt alındı. Hesabınız admin onayını bekliyor — onaylandığında giriş yapabilirsiniz."}
     except Exception as e:
         db.rollback()
-        return {"hata": f"Bir iç sistem hatası oluştu: {str(e)}"}
+        raise HTTPException(status_code=500, detail=f"Bir iç sistem hatası oluştu: {str(e)}")
+
+
+# --- 0.6 ADMIN: KULLANICI ONAY YÖNETİMİ ---
+@app.get("/pending-users", dependencies=[Depends(role_required(["Admin"]))])
+def pending_users_list(db: Session = Depends(get_db)):
+    users = db.query(models.User).filter(models.User.is_approved == 0).all()
+    return {"users": [{"id": u.id, "username": u.username, "role": u.role} for u in users]}
+
+
+@app.post("/approve-user/{user_id}", dependencies=[Depends(role_required(["Admin"]))])
+def approve_user(user_id: int, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Kullanıcı bulunamadı.")
+    user.is_approved = 1
+    db.commit()
+    _log_audit(db, actor=current_user.username, role=current_user.role,
+               action="USER_APPROVED", resource=user.username, detail=f"Rol: {user.role}")
+    return {"mesaj": f"{user.username} onaylandı."}
+
+
+@app.delete("/reject-user/{user_id}", dependencies=[Depends(role_required(["Admin"]))])
+def reject_user(user_id: int, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.id == user_id, models.User.is_approved == 0).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Bekleyen kullanıcı bulunamadı.")
+    uname = user.username
+    db.delete(user)
+    db.commit()
+    _log_audit(db, actor=current_user.username, role=current_user.role,
+               action="USER_REJECTED", resource=uname)
+    return {"mesaj": f"{uname} reddedildi ve silindi."}
 
 
 # ==========================================
@@ -377,9 +374,14 @@ def urunleri_getir(skip: int = 0, limit: int = 100, db: Session = Depends(get_db
             "description_en": u.description_en,
             "current_stock": u.current_stock,
             "unit_price": u.unit_price,
+            "category_id": u.category_id,
+            "supplier_id": u.supplier_id,
             "category_name_tr": u.category.name_tr if u.category else "Tanımsız",
             "category_name_en": u.category.name_en if u.category else "Undefined",
             "supplier_name": u.supplier.name if u.supplier else "Tanımsız",
+            "unit_cost": u.unit_cost,
+            "reorder_point": u.reorder_point,
+            "abc_class": u.abc_class,
             "expiration_date": u.expiration_date.isoformat() if u.expiration_date else None,
             "warehouse_location": u.warehouse_location
         })
@@ -390,26 +392,83 @@ def urunleri_getir(skip: int = 0, limit: int = 100, db: Session = Depends(get_db
 def root():
     return FileResponse("index.html")
 
-@app.get("/kasa.html")
-def kasa_screen():
-    return FileResponse("kasa.html")
-
-@app.get("/qr.html")
-def qr_screen():
-    return FileResponse("qr.html")
+@app.get("/sw.js")
+def service_worker():
+    return FileResponse("sw.js", media_type="application/javascript")
 
 
 
-@app.post("/urun-ekle", dependencies=[Depends(role_required(["Admin"]))])
-def urun_ekle(urun: ProductCreate, db: Session = Depends(get_db)):
+
+@app.post("/urun-ekle")
+def urun_ekle(urun: ProductCreate, current_user: models.User = Depends(role_required(["Admin", "Depo Müdürü"])), db: Session = Depends(get_db)):
     try:
         yeni_urun = models.Product(**urun.dict())
         db.add(yeni_urun)
         db.commit()
-        return {"mesaj": f"{urun.name_tr} veritabanına ORM şeması ile güvenle eklendi!"}
+        _log_audit(db, actor=current_user.username, role=current_user.role,
+                   action="PRODUCT_CREATE", resource=urun.name_tr,
+                   detail=f"SKU: {urun.sku} | Stok: {urun.current_stock}")
+        return {"mesaj": f"{urun.name_tr} veritabanına eklendi.", "product_id": yeni_urun.product_id}
     except Exception as e:
         db.rollback()
-        return {"hata": f"Ekleme hatası: {str(e)}"}
+        raise HTTPException(status_code=500, detail=f"Ekleme hatası: {str(e)}")
+
+
+@app.put("/urun/{product_id}")
+def urun_guncelle(product_id: int, urun: ProductUpdate, current_user: models.User = Depends(role_required(["Admin", "Depo Müdürü"])), db: Session = Depends(get_db)):
+    mevcut = db.query(models.Product).filter(models.Product.product_id == product_id).first()
+    if not mevcut:
+        raise HTTPException(status_code=404, detail="Ürün bulunamadı.")
+    degisenler = urun.dict(exclude_unset=True)
+    for alan, deger in degisenler.items():
+        setattr(mevcut, alan, deger)
+    db.commit()
+    _log_audit(db, actor=current_user.username, role=current_user.role,
+               action="PRODUCT_UPDATE", resource=mevcut.name_tr,
+               detail=", ".join(f"{k}={v}" for k, v in degisenler.items()))
+    return {"mesaj": f"{mevcut.name_tr} güncellendi."}
+
+
+@app.delete("/urun/{product_id}")
+def urun_sil(product_id: int, current_user: models.User = Depends(role_required(["Admin"])), db: Session = Depends(get_db)):
+    mevcut = db.query(models.Product).filter(models.Product.product_id == product_id).first()
+    if not mevcut:
+        raise HTTPException(status_code=404, detail="Ürün bulunamadı.")
+    ad = mevcut.name_tr
+    db.query(models.InventoryTransaction).filter(models.InventoryTransaction.product_id == product_id).delete(synchronize_session=False)
+    db.query(models.SupplyOrderApproval).filter(models.SupplyOrderApproval.product_id == product_id).delete(synchronize_session=False)
+    db.delete(mevcut)
+    db.commit()
+    _log_audit(db, actor=current_user.username, role=current_user.role,
+               action="PRODUCT_DELETE", resource=ad, detail=f"ID: {product_id}")
+    return {"mesaj": f"{ad} silindi."}
+
+
+@app.get("/stok-log", dependencies=[Depends(role_required(["Admin", "Depo Müdürü"]))])
+def stok_hareket_log(limit: int = 50, db: Session = Depends(get_db)):
+    """Son stok hareketlerini (IN/OUT) aktör bilgisi ile döner."""
+    hareketler = (
+        db.query(models.InventoryTransaction)
+        .order_by(models.InventoryTransaction.transaction_date.desc())
+        .limit(limit)
+        .all()
+    )
+    sonuc = []
+    for h in hareketler:
+        urun_adi = h.product.name_tr if h.product else f"ID:{h.product_id}"
+        sku = h.product.sku if h.product else "-"
+        sonuc.append({
+            "transaction_id": h.transaction_id,
+            "sku": sku,
+            "urun_adi": urun_adi,
+            "quantity": h.quantity,
+            "transaction_type": h.transaction_type,
+            "processed_by": h.processed_by,
+            "status": h.status,
+            "notes": h.notes,
+            "transaction_date": h.transaction_date.isoformat() if h.transaction_date else None,
+        })
+    return {"log": sonuc}
 
 # --- GERÇEK ZAMANLI İŞLEM UÇ NOKTASI (ASYNC WEBSOCKET) ---
 @app.post("/stok-hareketi")
@@ -452,17 +511,13 @@ async def stok_hareketi_kaydet(hareket: StockTransaction, background_tasks: Back
         db.commit()
         
         # --- AUDIT LOG: STOCK MOVEMENT ---
-        try:
-            urun_adi = db.query(models.Product).filter(models.Product.product_id == hareket.product_id).first()
-            log = models.AuditLog(
-                actor=current_user.username, role=current_user.role,
-                action=f"STOCK_{hareket.transaction_type.upper()}",
-                resource=urun_adi.name_en if urun_adi else f"ID:{hareket.product_id}",
-                detail=f"Qty: {hareket.quantity} | Status: {islem_durumu}"
-            )
-            db.add(log); db.commit()
-        except Exception:
-            pass
+        urun_adi = db.query(models.Product).filter(models.Product.product_id == hareket.product_id).first()
+        _log_audit(
+            db, actor=current_user.username, role=current_user.role,
+            action=f"STOCK_{hareket.transaction_type.upper()}",
+            resource=urun_adi.name_en if urun_adi else f"ID:{hareket.product_id}",
+            detail=f"Qty: {hareket.quantity} | Status: {islem_durumu}",
+        )
         
         # 2. CANLI YAYIN: Yöneticiye ping at!
         if islem_durumu == "BEKLEMEDE":
@@ -472,7 +527,7 @@ async def stok_hareketi_kaydet(hareket: StockTransaction, background_tasks: Back
         return {"mesaj": "İşlem doğrudan onaylandı ve stok güncellendi."}
     except Exception as e:
         db.rollback()
-        return {"hata": str(e)}
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/dashboard-ozet", dependencies=[Depends(role_required(["Admin", "Depo Müdürü"]))])
 def dashboard_ozet(db: Session = Depends(get_db)):
@@ -482,38 +537,11 @@ def dashboard_ozet(db: Session = Depends(get_db)):
     son_islemler = db.query(models.InventoryTransaction).order_by(models.InventoryTransaction.transaction_id.desc()).limit(5).all()
     sonuc_islemler = [{"islem": i.transaction_id, "tip": i.transaction_type, "adet": i.quantity, "urun_tr": i.product.name_tr, "urun_en": i.product.name_en} for i in son_islemler if i.product]
 
-    ozet = {
+    return {
         "finansal_durum": {"toplam_yatirim_maliyeti": float(yatirim)},
         "kritik_stok_uyari_sayisi": kritik_sayisi,
         "son_islemler": sonuc_islemler
     }
-    
-    # 🌟 GÜNLÜK Z-RAPORU CİROSU — SQL SUM ile (RAM'e çekmiyoruz!)
-    bugun_baslangic = datetime.datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-    gunluk_net_ciro = db.query(
-        func.sum(models.Sale.total_price)
-    ).filter(
-        models.Sale.created_at >= bugun_baslangic
-    ).scalar() or 0
-
-    # Günün Barista Performansı — GROUP BY ile tek sorguda
-    barista_rows = db.query(
-        models.Sale.barista_name,
-        func.sum(models.Sale.total_price).label("toplam")
-    ).filter(
-        models.Sale.created_at >= bugun_baslangic
-    ).group_by(models.Sale.barista_name).order_by(
-        func.sum(models.Sale.total_price).desc()
-    ).first()
-
-    yildiz_barista = "Veri Yok"
-    if barista_rows:
-        yildiz_barista = f"{barista_rows.barista_name} (Hasılat: {float(barista_rows.toplam):.1f} ₺)"
-
-    ozet["gunluk_ciro_tl"] = float(gunluk_net_ciro)
-    ozet["gunun_baristasi"] = yildiz_barista
-
-    return ozet
 
 
 
@@ -571,7 +599,7 @@ def fire_raporu(db: Session = Depends(get_db)):
 
 @app.get("/talep-tahmini", dependencies=[Depends(role_required(["Admin", "Depo Müdürü"]))])
 def talep_tahmini(db: Session = Depends(get_db)):
-    otuz_gun_once = datetime.datetime.utcnow() - datetime.timedelta(days=30)
+    otuz_gun_once = datetime.datetime.utcnow() - datetime.timedelta(days=REPORTING_WINDOW_DAYS)
     Gecmis_cikislar = db.query(
         models.InventoryTransaction.product_id,
         func.sum(models.InventoryTransaction.quantity).label("toplam")
@@ -605,8 +633,10 @@ def bekleyen_talepler(skip: int = 0, limit: int = 100, db: Session = Depends(get
 @app.put("/talep-yanitla/{islem_id}")
 async def talep_yanitla(islem_id: int, yanit: TalepYaniti, background_tasks: BackgroundTasks, current_user: models.User = Depends(role_required(["Admin", "Depo Müdürü"])), db: Session = Depends(get_db)):
     talep = db.query(models.InventoryTransaction).filter(models.InventoryTransaction.transaction_id == islem_id).first()
-    if not talep: return {"hata": "Talep bulunamadı."}
-    if talep.status != "BEKLEMEDE": return {"hata": "Bu talep zaten yanıtlanmış."}
+    if not talep:
+        raise HTTPException(status_code=404, detail="Talep bulunamadı.")
+    if talep.status != "BEKLEMEDE":
+        raise HTTPException(status_code=409, detail="Bu talep zaten yanıtlanmış.")
     
     talep.status = yanit.yeni_durum.upper()
     talep.notes = f"{(talep.notes or '')} | Yanıtlayan: {current_user.username}"
@@ -630,515 +660,16 @@ async def talep_yanitla(islem_id: int, yanit: TalepYaniti, background_tasks: Bac
                 })
                 
     db.commit()
-    # --- AUDIT LOG: APPROVAL ---
-    try:
-        prn = talep.product.name_en if talep.product else f"ID:{islem_id}"
-        log = models.AuditLog(
-            actor=current_user.username, role=current_user.role,
-            action=f"APPROVE_{yanit.yeni_durum.upper()}",
-            resource=prn,
-            detail=f"Tx #{islem_id}"
-        )
-        db.add(log); db.commit()
-    except Exception:
-        pass
-    await manager.broadcast("TABLO_YENILE") # Arayüzlere tabloyu güncellemeleri için sinyal fırlat
+    _log_audit(
+        db, actor=current_user.username, role=current_user.role,
+        action=f"APPROVE_{yanit.yeni_durum.upper()}",
+        resource=talep.product.name_en if talep.product else f"ID:{islem_id}",
+        detail=f"Tx #{islem_id}",
+    )
     return {"mesaj": f"Talep {talep.status} olarak işlendi."}
 
-# --- YENİ! KASA / POS (BOM SİSTEMİ) ---
-@app.get("/menu-getir", dependencies=[Depends(role_required(["Admin", "Barista", "Depo Müdürü"]))])
-def menu_getir(db: Session = Depends(get_db)):
-    menu = db.query(models.MenuItem).all()
-    res = []
-    for m in menu:
-        res.append({
-            "id": m.id, "name": m.name, "price": m.price, "emoji": m.image_emoji,
-            "category": m.category, "image_url": m.image_url
-        })
-    return {"menu": res}
 
 
-@app.post("/satis-yap", dependencies=[Depends(role_required(["Admin", "Barista"]))])
-async def satis_yap(satis: SatisTalebi, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Hızlı Satış (Take-away) - Hiç masa ile uğraşmadan direkt satış yapar."""
-    try:
-        menu_item = db.query(models.MenuItem).filter(models.MenuItem.id == satis.menu_item_id).first()
-        if not menu_item: raise HTTPException(status_code=404, detail="Ürün bulunamadı.")
-            
-        # BOM - Reçete Düşümü
-        receteler = db.query(models.RecipeIngredient).filter(models.RecipeIngredient.menu_item_id == menu_item.id).all()
-        for hammadde in receteler:
-            toplam_dusulur = hammadde.quantity_required * satis.adet
-            urun_db = db.query(models.Product).filter(models.Product.product_id == hammadde.product_id).first()
-            if urun_db:
-                is_negative = (urun_db.current_stock - toplam_dusulur) < 0
-                urun_db.current_stock -= toplam_dusulur
-                not_metni = f"Hızlı Satış (Takeaway): {menu_item.name}" + (" (⚠ STOK EKSİYE DÜŞTÜ)" if is_negative else "")
-                
-                db.add(models.InventoryTransaction(
-                    product_id=urun_db.product_id, quantity=toplam_dusulur, transaction_type="OUT",
-                    notes=not_metni, processed_by=current_user.username,
-                    status="ONAYLANDI", source="Kasa-Takeaway"
-                ))
-        
-        yeni_satis = models.Sale(
-            menu_item_id=menu_item.id, quantity=satis.adet, 
-            total_price=float(menu_item.price * satis.adet), 
-            customer_name=satis.musteri_adi, customer_id=satis.customer_id, barista_name=current_user.username,
-            payment_method=satis.payment_method, source="Kasa-Takeaway"
-        )
-        db.add(yeni_satis)
-        
-        if satis.customer_id:
-            customer = db.query(models.Customer).filter(models.Customer.id == satis.customer_id).first()
-            if customer:
-                customer.total_visits += 1
-                cat = (menu_item.category or "").lower()
-                # 9+1 Sistemi: Sadece içecek kategorileri puan kazandırır
-                if any(x in cat for x in ["kahve", "demleme", "soğuk"]):
-                    customer.loyalty_points += satis.adet
-        
-        db.commit()
-        await manager.broadcast("TABLO_YENILE")
-        return {"mesaj": "Paket servis satışı tamamlandı.", "toplam": float(yeni_satis.total_price)}
-    except Exception as e:
-        db.rollback(); raise HTTPException(status_code=500, detail=str(e))
-
-# --- MASA YÖNETİMİ ENDPOİNTS ---
-
-@app.get("/pos-masalar", dependencies=[Depends(role_required(["Admin", "Barista"]))])
-def masalari_listele(db: Session = Depends(get_db)):
-    masalar = db.query(models.Table).order_by(models.Table.id).all()
-    return {"masalar": [{"id": m.id, "name": m.name, "is_occupied": m.is_occupied, "x_pos": m.x_pos, "y_pos": m.y_pos} for m in masalar]}
-
-@app.post("/masa-konum-guncelle", dependencies=[Depends(role_required(["Admin"]))])
-def masa_konum_guncelle(req: TableLocationUpdate, db: Session = Depends(get_db)):
-    masa = db.query(models.Table).filter(models.Table.id == req.table_id).first()
-    if masa:
-        masa.x_pos = req.x_pos
-        masa.y_pos = req.y_pos
-        db.commit()
-    return {"mesaj": "Masa konumu kaydedildi."}
-
-@app.post("/masaya-toplu-siparis", dependencies=[Depends(role_required(["Admin", "Barista"]))])
-async def masaya_toplu_siparis(req: BulkTableOrderRequest, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
-    try:
-        masa = db.query(models.Table).filter(models.Table.id == req.table_id).first()
-        if not masa: raise HTTPException(status_code=404, detail="Masa bulunamadı.")
-        
-        siparis = db.query(models.Order).filter(models.Order.table_id == req.table_id, models.Order.status == "PENDING").first()
-        if not siparis:
-            siparis = models.Order(table_id=req.table_id, status="PENDING")
-            db.add(siparis); db.flush()
-            masa.is_occupied = 1
-            
-        eklenenler = 0
-        for i_req in req.items:
-            urun = db.query(models.MenuItem).filter(models.MenuItem.id == i_req["menu_item_id"]).first()
-            if not urun: continue
-            qty = i_req.get("quantity", 1)
-            is_ikram = i_req.get("is_ikram", False)
-            fiyat = 0.0 if is_ikram else urun.price
-            
-            item = models.OrderItem(order_id=siparis.id, menu_item_id=urun.id, quantity=qty, unit_price=fiyat)
-            db.add(item)
-            siparis.total_amount += (fiyat * qty)
-            eklenenler += 1
-            
-        db.commit()
-        await manager.broadcast("TABLO_YENILE")
-        return {"mesaj": f"{eklenenler} ürün siparişe eklendi."}
-    except Exception as e:
-        db.rollback(); raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/masa-detay/{table_id}", dependencies=[Depends(role_required(["Admin", "Barista"]))])
-def masa_detay(table_id: int, db: Session = Depends(get_db)):
-    siparis = db.query(models.Order).filter(models.Order.table_id == table_id, models.Order.status == "PENDING").first()
-    if not siparis: return {"items": [], "total": 0.0}
-    
-    items = []
-    for it in siparis.items:
-        items.append({"id": it.id, "menu_item_id": it.menu_item.id, "name": it.menu_item.name, "qty": it.quantity, "price": it.unit_price, "ikram": it.unit_price == 0})
-    return {"items": items, "total": siparis.total_amount}
-
-@app.delete("/siparis-kalemi-sil/{item_id}", dependencies=[Depends(role_required(["Admin", "Barista"]))])
-async def siparis_kalemi_sil(item_id: int, db: Session = Depends(get_db)):
-    try:
-        item = db.query(models.OrderItem).filter(models.OrderItem.id == item_id).first()
-        if not item: raise HTTPException(status_code=404, detail="Sipariş kalemi bulunamadı.")
-        
-        siparis = db.query(models.Order).filter(models.Order.id == item.order_id).first()
-        if siparis:
-            siparis.total_amount -= (item.unit_price * item.quantity)
-            if siparis.total_amount < 0: siparis.total_amount = 0.0
-            
-            db.delete(item)
-            db.commit()
-            
-            # Eğer siparişte hiç kalem kalmadıysa masayı boşa çekebiliriz
-            if len(siparis.items) == 0:
-                masa = db.query(models.Table).filter(models.Table.id == siparis.table_id).first()
-                if masa: masa.is_occupied = 0
-                db.delete(siparis)
-                db.commit()
-            
-            await manager.broadcast("TABLO_YENILE")
-            return {"mesaj": "Ürün siparişten çıkarıldı."}
-    except Exception as e:
-        db.rollback(); raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/masa-tasi", dependencies=[Depends(role_required(["Admin", "Barista"]))])
-async def masa_tasi(req: TableMoveRequest, db: Session = Depends(get_db)):
-    try:
-        eski_siparis = db.query(models.Order).filter(models.Order.table_id == req.from_table_id, models.Order.status == "PENDING").first()
-        if not eski_siparis: raise HTTPException(status_code=404, detail="Kaynak masada açık sipariş yok.")
-        
-        hedef_masa = db.query(models.Table).filter(models.Table.id == req.to_table_id).first()
-        eski_masa = db.query(models.Table).filter(models.Table.id == req.from_table_id).first()
-        
-        hedef_siparis = db.query(models.Order).filter(models.Order.table_id == req.to_table_id, models.Order.status == "PENDING").first()
-        
-        if hedef_siparis:
-            # Hedefte sipariş varsa, ürünleri oraya aktar
-            for item in eski_siparis.items:
-                item.order_id = hedef_siparis.id
-            hedef_siparis.total_amount += eski_siparis.total_amount
-            db.delete(eski_siparis)
-        else:
-            # Hedefte sipariş yoksa, direkt siparişi kaydır
-            eski_siparis.table_id = req.to_table_id
-            hedef_masa.is_occupied = 1
-            
-        eski_masa.is_occupied = 0
-        db.commit()
-        await manager.broadcast("TABLO_YENILE")
-        return {"mesaj": "Masa başarıyla taşındı/birleştirildi."}
-    except Exception as e:
-        db.rollback(); raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/masa-hesap-kapat", dependencies=[Depends(role_required(["Admin", "Barista"]))])
-async def masa_hesap_kapat(req: CheckoutRequest, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
-    try:
-        siparis = db.query(models.Order).filter(models.Order.table_id == req.table_id, models.Order.status == "PENDING").first()
-        if not siparis: raise HTTPException(status_code=404, detail="Açık sipariş bulunamadı.")
-        
-        # 1. Stok Düşümü (BOM)
-        for item in siparis.items:
-            receteler = db.query(models.RecipeIngredient).filter(models.RecipeIngredient.menu_item_id == item.menu_item_id).all()
-            for hammadde in receteler:
-                toplam_dusulur = hammadde.quantity_required * item.quantity
-                u_db = db.query(models.Product).filter(models.Product.product_id == hammadde.product_id).first()
-                if u_db:
-                    is_negative = (u_db.current_stock - toplam_dusulur) < 0
-                    u_db.current_stock -= toplam_dusulur
-                    not_metni = f"Masa Satışı: {item.menu_item.name}" + (" (⚠ STOK EKSİYE DÜŞTÜ)" if is_negative else "")
-                    
-                    db.add(models.InventoryTransaction(
-                        product_id=u_db.product_id, quantity=toplam_dusulur, transaction_type="OUT",
-                        notes=not_metni, processed_by=current_user.username,
-                        status="ONAYLANDI", source=f"Masa-{req.table_id}"
-                    ))
-        
-        # 2. Sale (Z-Raporu) Kaydı
-        # CRM / Sadakat Puanı İşleme (Puan harcanacaksa önce indirimi hesapla)
-        discount_amount = 0.0
-        free_coffee_item_id = None
-        customer = None
-        
-        if req.customer_id:
-            customer = db.query(models.Customer).filter(models.Customer.id == req.customer_id).first()
-            if customer:
-                customer.total_visits += 1
-                
-                # Hediye kullanılacaksa en ucuz kahveyi bul
-                if req.use_free_coffee and customer.loyalty_points >= 9:
-                    cheapest_price = float('inf')
-                    for item in siparis.items:
-                        cat = (item.menu_item.category or "").lower()
-                        if any(x in cat for x in ["kahve", "demleme", "soğuk"]):
-                            if item.unit_price < cheapest_price:
-                                cheapest_price = item.unit_price
-                                free_coffee_item_id = item.id
-                    
-                    if free_coffee_item_id:
-                        discount_amount = cheapest_price
-                        customer.loyalty_points -= 9
-
-        # Split Payment (Parçalı Ödeme) Mantığı
-        is_split = req.amount_cash > 0 and req.amount_card > 0
-        kalan_nakit = req.amount_cash
-        
-        for item in siparis.items:
-            item_total = item.unit_price * item.quantity
-            
-            # Eğer bu ürün hediye edilense 1 adetinin fiyatını düş
-            if free_coffee_item_id == item.id:
-                item_total -= item.unit_price
-                # Eğer birden fazla aynı ürün varsa sadece 1 tanesi bedava
-            
-            if item_total <= 0:
-                continue # İkramlar/Bedavalar ciroya yansımaz (Stok düştü zaten)
-                
-            if is_split:
-                if kalan_nakit >= item_total:
-                    # Tamamı nakit
-                    pay_method = "Nakit"
-                    kalan_nakit -= item_total
-                    db.add(models.Sale(menu_item_id=item.menu_item_id, quantity=item.quantity, total_price=item_total, barista_name=current_user.username, payment_method=pay_method, source=f"Masa-{req.table_id}"))
-                elif kalan_nakit > 0:
-                    # Bir kısmı nakit, kalanı kart (Miktarı paylaştırıyoruz)
-                    db.add(models.Sale(menu_item_id=item.menu_item_id, quantity=item.quantity, total_price=kalan_nakit, barista_name=current_user.username, payment_method="Nakit", source=f"Masa-{req.table_id}"))
-                    db.add(models.Sale(menu_item_id=item.menu_item_id, quantity=0, total_price=(item_total - kalan_nakit), barista_name=current_user.username, payment_method="Kredi Kartı", source=f"Masa-{req.table_id}"))
-                    kalan_nakit = 0
-                else:
-                    # Tamamı kart
-                    pay_method = "Kredi Kartı"
-                    db.add(models.Sale(menu_item_id=item.menu_item_id, quantity=item.quantity, total_price=item_total, barista_name=current_user.username, payment_method=pay_method, source=f"Masa-{req.table_id}"))
-            else:
-                db.add(models.Sale(
-                    menu_item_id=item.menu_item_id, quantity=item.quantity, 
-                    total_price=item_total, barista_name=current_user.username,
-                    payment_method=req.payment_method, source=f"Masa-{req.table_id}"
-                ))
-            
-        # Puan Ekleme (Hediye harcandıktan sonra kalan yeni kahvelerin puanını ekle)
-        if customer:
-            coffee_count = 0
-            for item in siparis.items:
-                cat = (item.menu_item.category or "").lower()
-                if any(x in cat for x in ["kahve", "demleme", "soğuk"]):
-                    coffee_count += item.quantity
-            
-            # Eğer hediye kahve kullanıldıysa o kahve puan kazandırmaz (veya kazandırır size kalmış, genelde hediye puan vermez)
-            if free_coffee_item_id:
-                coffee_count = max(0, coffee_count - 1)
-                
-            customer.loyalty_points += coffee_count
-                
-        # 3. Siparişi Kapat ve Masayı Boşalt
-        siparis.status = "PAID"
-        masa = db.query(models.Table).filter(models.Table.id == req.table_id).first()
-        masa.is_occupied = 0
-        
-        db.commit()
-        await manager.broadcast("TABLO_YENILE")
-        return {"mesaj": "Masa hesabı başarıyla kapatıldı."}
-    except Exception as e:
-        db.rollback(); raise HTTPException(status_code=500, detail=str(e))
-
-# --- GİDER VE ZAYİ ENDPOİNTS ---
-
-@app.post("/pos/gider-ekle", dependencies=[Depends(role_required(["Admin", "Barista"]))])
-def gider_ekle(req: ExpenseCreate, db: Session = Depends(get_db)):
-    try:
-        gider = models.Expense(**req.dict())
-        db.add(gider)
-        db.commit()
-        return {"mesaj": "Gider başarıyla kaydedildi."}
-    except Exception as e:
-        db.rollback(); raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/pos/zayi-ekle", dependencies=[Depends(role_required(["Admin", "Barista"]))])
-def zayi_ekle(req: WastageCreate, db: Session = Depends(get_db)):
-    try:
-        urun = db.query(models.Product).filter(models.Product.product_id == req.product_id).first()
-        if not urun: raise HTTPException(status_code=404, detail="Ürün bulunamadı.")
-        
-        # Stoktan Düş
-        urun.current_stock -= req.quantity
-        zarar = urun.unit_cost * req.quantity
-        
-        fire = models.Wastage(
-            product_id=req.product_id, quantity=req.quantity,
-            reason=req.reason, cost_impact=zarar
-        )
-        db.add(fire)
-        db.commit()
-        return {"mesaj": f"Zayi işlendi. Zarar: {zarar} TL"}
-    except Exception as e:
-        db.rollback(); raise HTTPException(status_code=500, detail=str(e))
-
-# ==========================================
-# --- 7. MÜŞTERİ QR MENÜ (Self-Service) ---
-# ==========================================
-@app.get("/public-menu")
-def get_public_menu(db: Session = Depends(get_db)):
-    # Herkese açık salt-okunur menü listesi
-    items = db.query(models.MenuItem).filter().all()
-    grouped = {}
-    for i in items:
-        # İleride is_active eklenirse buraya filtre eklenebilir.
-        cat = i.category or "Diğer"
-        if cat not in grouped: grouped[cat] = []
-        grouped[cat].append({
-            "id": i.id, "name": i.name, "price": i.price, "image_emoji": i.image_emoji
-        })
-    return {"menu": grouped}
-
-@app.post("/qr-siparis")
-async def qr_siparis_olustur(req: QROrderRequest, db: Session = Depends(get_db)):
-    try:
-        masa = db.query(models.Table).filter(models.Table.id == req.table_id).first()
-        if not masa: raise HTTPException(status_code=404, detail="Geçersiz Masa QR Kodu")
-        
-        siparis = db.query(models.Order).filter(models.Order.table_id == req.table_id, models.Order.status == "PENDING").first()
-        if not siparis:
-            siparis = models.Order(table_id=req.table_id, status="PENDING")
-            db.add(siparis); db.flush()
-            masa.is_occupied = 1
-            
-        eklenen = 0
-        for i_req in req.items:
-            urun = db.query(models.MenuItem).filter(models.MenuItem.id == i_req.menu_item_id).first()
-            if not urun: continue
-            
-            item = models.OrderItem(order_id=siparis.id, menu_item_id=urun.id, quantity=i_req.quantity, unit_price=urun.price)
-            db.add(item)
-            siparis.total_amount += (urun.price * i_req.quantity)
-            eklenen += i_req.quantity
-            
-        db.commit()
-        await manager.broadcast("TABLO_YENILE")
-        await manager.broadcast("QR_SIPARIS_GELDI") # Özel zil sesi/toast için
-        return {"mesaj": f"{eklenen} adet ürün siparişe eklendi. Siparişiniz hazırlanacaktır."}
-    except Exception as e:
-        db.rollback(); raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/pos/rapor-ozet", dependencies=[Depends(role_required(["Admin", "Barista"]))])
-def rapor_ozet(db: Session = Depends(get_db)):
-    # Bugünün verileri
-    bugun = datetime.date.today()
-    satislar = db.query(func.sum(models.Sale.total_price)).filter(func.date(models.Sale.created_at) == bugun).scalar() or 0.0
-    giderler = db.query(func.sum(models.Expense.amount)).filter(func.date(models.Expense.created_at) == bugun).scalar() or 0.0
-    zayiler = db.query(func.sum(models.Wastage.cost_impact)).filter(func.date(models.Wastage.created_at) == bugun).scalar() or 0.0
-    
-    return {
-        "cironuz": satislar,
-        "gider_toplami": giderler,
-        "zayi_zarari": zayiler,
-        "net_durum": satislar - giderler - zayiler
-    }
-
-# ==========================================
-# --- 8. YÖNETİCİ İŞ ZEKASI (BI & HEATMAP) ---
-# ==========================================
-@app.get("/analytics/heatmap", dependencies=[Depends(role_required(["Admin"]))])
-def get_heatmap_data(db: Session = Depends(get_db)):
-    # Tüm masaları getir
-    masalar = db.query(models.Table).all()
-    
-    # Masaların bugüne ait veya genel cirosunu topla.
-    # Gerçek sistemde func.date() ile de filtrelenebilir,
-    # şimdilik görsellik adına All-Time verelim.
-    heatmap_veri = []
-    
-    for masa in masalar:
-        # Sale tablosunda source="Masa-{id}" formatında.
-        ciro = db.query(func.sum(models.Sale.total_price)).filter(models.Sale.source == f"Masa-{masa.id}").scalar() or 0.0
-        
-        heatmap_veri.append({
-            "id": masa.id,
-            "name": masa.name,
-            "x_pos": masa.x_pos,
-            "y_pos": masa.y_pos,
-            "revenue": round(ciro, 2)
-        })
-        
-    return {"heatmap": heatmap_veri}
-
-@app.get("/pos/detayli-rapor", dependencies=[Depends(role_required(["Admin"]))])
-def detayli_rapor(db: Session = Depends(get_db)):
-    # 1. En çok satan ürünler
-    top_selling = db.query(models.MenuItem.name, func.sum(models.Sale.quantity).label("total_qty")) \
-        .join(models.Sale).group_by(models.MenuItem.name).order_by(text("total_qty DESC")).limit(5).all()
-        
-    # 2. Ödeme yöntemi dağılımı
-    payment_dist = db.query(models.Sale.payment_method, func.sum(models.Sale.total_price)) \
-        .group_by(models.Sale.payment_method).all()
-        
-    return {
-        "top_selling": [{"name": r[0], "qty": r[1]} for r in top_selling],
-        "payments": [{"method": r[0], "total": r[1]} for r in payment_dist]
-    }
-
-@app.post("/pos/ayarlar", dependencies=[Depends(role_required(["Admin"]))])
-def ayarlar_kaydet(req: SettingsUpdate, db: Session = Depends(get_db)):
-    # Gerçek sistemde bir Settings tablosu olur, V2 için .env veya basit bir JSON simülasyonu:
-    return {"mesaj": f"{req.cafe_name} ayarları başarıyla güncellendi."}
-
-@app.post("/menu-ekle", dependencies=[Depends(role_required(["Admin"]))])
-def menu_ekle(req: MenuItemCreate, db: Session = Depends(get_db)):
-    cat_l = req.category.lower() if req.category else "kahve"
-    
-    IMG_MAP = {
-        "tatlı": "/static/images/dessert.jpg",
-        "pasta": "/static/images/dessert.jpg",
-        "çay": "/static/images/tea.jpg",
-        "soğuk": "/static/images/cold.jpg",
-        "sandviç": "/static/images/sandwich.jpg",
-        "kahvaltı": "/static/images/breakfast.jpg",
-        "kahve": "/static/images/coffee.jpg"
-    }
-
-    image_url = IMG_MAP["kahve"]
-    for k, v in IMG_MAP.items():
-        if k in cat_l:
-            image_url = v
-            break
-    
-    yeni = models.MenuItem(
-        name=req.name, price=req.price, image_emoji=req.image_emoji,
-        category=req.category, image_url=image_url
-    )
-    db.add(yeni)
-    db.commit()
-    return {"mesaj": f"{req.name} menüye eklendi."}
-
-@app.delete("/menu-sil/{item_id}", dependencies=[Depends(role_required(["Admin"]))])
-def menu_sil(item_id: int, db: Session = Depends(get_db)):
-    item = db.query(models.MenuItem).filter(models.MenuItem.id == item_id).first()
-    if not item: raise HTTPException(status_code=404, detail="Ürün bulunamadı")
-    db.delete(item)
-    db.commit()
-    return {"mesaj": "Ürün silindi"}
-
-@app.post("/pos/masa-ekle", dependencies=[Depends(role_required(["Admin"]))])
-async def masa_ekle(name: str, db: Session = Depends(get_db)):
-    yeni = models.Table(name=name, is_occupied=False)
-    db.add(yeni)
-    db.commit()
-    await manager.broadcast("TABLO_YENILE")
-    return {"mesaj": f"{name} başarıyla oluşturuldu"}
-
-@app.delete("/pos/masa-sil/{table_id}", dependencies=[Depends(role_required(["Admin"]))])
-async def masa_sil(table_id: int, db: Session = Depends(get_db)):
-    """Bir masayı siler. Aktif (PENDING) siparişi varsa silmeye izin vermez."""
-    try:
-        masa = db.query(models.Table).filter(models.Table.id == table_id).first()
-        if not masa:
-            raise HTTPException(status_code=404, detail="Masa bulunamadı.")
-        aktif_siparis = db.query(models.Order).filter(
-            models.Order.table_id == table_id,
-            models.Order.status == "PENDING"
-        ).first()
-        if aktif_siparis:
-            raise HTTPException(status_code=400, detail="Bu masada açık sipariş var. Önce hesabı kapatın.")
-        db.delete(masa)
-        db.commit()
-        await manager.broadcast("TABLO_YENILE")
-        return {"mesaj": f"{masa.name} başarıyla silindi."}
-    except HTTPException:
-        raise
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-
-class SupplyApprovalRequest(BaseModel):
-    product_id: int
-    quantity: float
-    supplier_name: Optional[str] = None
 
 @app.post("/tedarik-siparis-onayla", dependencies=[Depends(role_required(["Admin", "Depo Müdürü"]))])
 async def tedarik_siparis_onayla(req: SupplyApprovalRequest, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
@@ -1172,78 +703,8 @@ async def tedarik_siparis_onayla(req: SupplyApprovalRequest, current_user=Depend
 
 
 
-# ==========================================
-# --- 3. PARTİ POS ENTEGRASYONU (WEBHOOKS) ---
-# ==========================================
-
-@app.post("/api/v1/api-keys", dependencies=[Depends(role_required(["Admin", "Depo Müdürü"]))])
-def api_key_olustur(payload: ApiKeyCreate, db: Session = Depends(get_db)):
-    try:
-        yeni_key = secrets.token_hex(32)
-        key_db = models.ApiKey(provider_name=payload.provider_name, api_key=yeni_key)
-        db.add(key_db)
-        db.commit()
-        return {"mesaj": f"{payload.provider_name} için API Key başarıyla üretildi.", "api_key": yeni_key}
-    except Exception as e:
-        db.rollback()
-        return {"hata": f"API Key üretilemedi: {str(e)}"}
-
-@app.get("/api/v1/api-keys", dependencies=[Depends(role_required(["Admin", "Depo Müdürü"]))])
-def api_keys_listele(db: Session = Depends(get_db)):
-    keys = db.query(models.ApiKey).order_by(models.ApiKey.id.desc()).all()
-    return {"api_keys": [{"id": k.id, "provider": k.provider_name, "created_at": k.created_at} for k in keys]}
-
-@app.post("/api/v1/webhooks/pos-sale")
-async def pos_webhook(payload: WebhookSalePayload, api_k = Depends(verify_api_key), db: Session = Depends(get_db)):
-    try:
-        islem_notu = f"Webhook ({payload.pos_provider})"
-        
-        for item in payload.items:
-            # 1. MenuItem Bul (dış sisteme ait ID üzerinden eşleştiriyoruz)
-            menu_urun = db.query(models.MenuItem).filter(models.MenuItem.external_pos_id == item.external_product_id).first()
-            if not menu_urun:
-                continue # Model eşleşmezse stok düşümünü pas geç
-            
-            # 2. Reçete Düşümü
-            receteler = db.query(models.RecipeIngredient).filter(models.RecipeIngredient.menu_item_id == menu_urun.id).all()
-            for hammadde in receteler:
-                toplam_dusulecek = hammadde.quantity_required * item.quantity
-                urun_db = db.query(models.Product).filter(models.Product.product_id == hammadde.product_id).first()
-                if urun_db:
-                    urun_db.current_stock -= toplam_dusulecek
-                    islem = models.InventoryTransaction(
-                        product_id=urun_db.product_id,
-                        quantity=toplam_dusulecek,
-                        transaction_type="OUT",
-                        notes=f"{islem_notu} Oto Reçete Düşüşü: {item.quantity}x {menu_urun.name}",
-                        processed_by="System API",
-                        status="ONAYLANDI",
-                        source=f"Webhook-{payload.pos_provider}"
-                    )
-                    db.add(islem)
-                    
-            # 3. Z-Raporuna İşle
-            yeni_satis = models.Sale(
-                menu_item_id=menu_urun.id,
-                quantity=item.quantity,
-                total_price=item.price * item.quantity,
-                customer_name=payload.receipt_id,
-                barista_name=f"API-{payload.pos_provider}",
-                payment_method="Nakit/Kredi (3. Parti POS)",
-                source=f"Webhook-{payload.pos_provider}"
-            )
-            db.add(yeni_satis)
-
-        db.commit()
-        await manager.broadcast("TABLO_YENILE")
-        return {"mesaj": "Webhook başarıyla işlendi ve stoklar LIFO metoduna göre güncellendi.", "status": "ok"}
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-
 @app.get("/sevk-raporu", dependencies=[Depends(role_required(["Admin", "Depo Müdürü"]))])
 def sevk_raporu(db: Session = Depends(get_db)):
-    from sqlalchemy.orm import aliased
     # N+1 sorgu yerine tek JOIN ile top-5 çıkış ürünü
     en_cok = db.query(
         models.Product.name_tr,
@@ -1272,93 +733,6 @@ def sevk_raporu(db: Session = Depends(get_db)):
     ).group_by(func.date(models.InventoryTransaction.transaction_date)).all()
 
     return {"grafik_1_pasta": {"veriler": pasta}, "grafik_2_cizgi": {"veriler": [{"tarih": str(t.dt), "gunluk_cikis_adeti": float(t.toplam or 0)} for t in trend_data]}}
-
-
-# ==========================================
-# --- AI PREDİCTOR DASHBOARD (scikit-learn LinearRegression) ---
-# ==========================================
-@app.get("/ai-predictor", dependencies=[Depends(role_required(["Admin", "Depo Müdürü"]))])
-def ai_predictor(db: Session = Depends(get_db)):
-    """Top-5 ürün için son 14 günlük gerçek trendden scikit-learn LinearRegression ile projeksiyon üretir."""
-    on_dort_gun_once = datetime.datetime.utcnow() - datetime.timedelta(days=14)
-
-    # En yüksek hacimli 5 ürünü bul (14 gün)
-    top_products = db.query(
-        models.InventoryTransaction.product_id,
-        func.sum(models.InventoryTransaction.quantity).label("total")
-    ).filter(
-        models.InventoryTransaction.transaction_type == "OUT",
-        models.InventoryTransaction.transaction_date >= on_dort_gun_once
-    ).group_by(models.InventoryTransaction.product_id)\
-     .order_by(func.sum(models.InventoryTransaction.quantity).desc())\
-     .limit(5).all()
-
-    result = []
-    for (p_id, _) in top_products:
-        urun = db.query(models.Product).filter(models.Product.product_id == p_id).first()
-        if not urun:
-            continue
-
-        # Son 14 günlük günlük çıkış verisi (model eğitim penceresi)
-        train_rows = db.query(
-            func.date(models.InventoryTransaction.transaction_date).label("dt"),
-            func.sum(models.InventoryTransaction.quantity).label("qty")
-        ).filter(
-            models.InventoryTransaction.product_id == p_id,
-            models.InventoryTransaction.transaction_type == "OUT",
-            models.InventoryTransaction.transaction_date >= on_dort_gun_once
-        ).group_by(func.date(models.InventoryTransaction.transaction_date)).all()
-
-        train_map = {str(r.dt): float(r.qty or 0) for r in train_rows}
-        base_train = datetime.date.today() - datetime.timedelta(days=13)
-        train_dates = [(base_train + datetime.timedelta(days=i)).isoformat() for i in range(14)]
-        y_train = np.array([train_map.get(d, 0.0) for d in train_dates]).reshape(-1, 1)
-        X_train = np.arange(14).reshape(-1, 1)
-
-        # scikit-learn LinearRegression modeli eğit
-        model = LinearRegression()
-        model.fit(X_train, y_train)
-
-        # Model kalite metrikleri
-        y_pred_train = model.predict(X_train).flatten()
-        r2 = round(float(r2_score(y_train, y_pred_train)), 3)
-        slope = float(model.coef_[0][0])
-        trend_direction = "rising" if slope > 0.1 else ("falling" if slope < -0.1 else "stable")
-
-        # Son 7 gün görüntci (actual)
-        base_actual = datetime.date.today() - datetime.timedelta(days=6)
-        actual = []
-        for i in range(7):
-            d = (base_actual + datetime.timedelta(days=i)).isoformat()
-            actual.append({"day": d, "qty": train_map.get(d, 0.0)})
-
-        # Gelecek 7 gün projeksiyonu
-        projection = []
-        for i in range(7):
-            X_future = np.array([[14 + i]])
-            predicted = max(0.0, round(float(model.predict(X_future)[0][0]), 1))
-            d = (datetime.date.today() + datetime.timedelta(days=i + 1)).isoformat()
-            projection.append({"day": d, "qty": predicted})
-
-        weekly_total = round(sum(p["qty"] for p in projection), 1)
-        avg_daily = round(np.mean([a["qty"] for a in actual]), 2)
-
-        result.append({
-            "product_id": p_id,
-            "name_tr": urun.name_tr,
-            "name_en": urun.name_en,
-            "current_stock": urun.current_stock,
-            "actual": actual,
-            "projection": projection,
-            "weekly_projected_total": weekly_total,
-            "avg_daily_consumption": avg_daily,
-            "r2_score": r2,
-            "trend_direction": trend_direction,
-            "alert": urun.current_stock < weekly_total
-        })
-
-    logger.info(f"AI Predictor: {len(result)} ürün için projeksiyon üretildi.")
-    return {"products": result}
 
 
 # ==========================================
@@ -1397,7 +771,7 @@ def kar_marji_analizi(db: Session = Depends(get_db)):
     ve stok yeterliliği analizi. Sade SQL + Python ile hesaplanır.
     """
     urunler = db.query(models.Product).filter(models.Product.current_stock > 0).all()
-    otuz_gun_once = datetime.datetime.utcnow() - datetime.timedelta(days=30)
+    otuz_gun_once = datetime.datetime.utcnow() - datetime.timedelta(days=REPORTING_WINDOW_DAYS)
 
     # Son 30 günlük çıkış hacimleri — tek sorguda
     cikis_map = {
@@ -1417,10 +791,10 @@ def kar_marji_analizi(db: Session = Depends(get_db)):
         marj_yuzde = round((marj_tl / u.unit_price * 100) if u.unit_price > 0 else 0, 1)
         toplam_kar = round(marj_tl * u.current_stock, 2)
 
-        # EWMA (α=0.3): son 30 günlük günlük ortalama tüketim
+        # EWMA (α=EWMA_ALPHA): son 30 günlük günlük ortalama tüketim
         aylik_cikis = cikis_map.get(u.product_id, 0.0)
-        gunluk_ort  = aylik_cikis / 30
-        ewma_talep  = round(gunluk_ort * 0.3 + (aylik_cikis / 30) * 0.7, 2)  # α=0.3
+        gunluk_ort  = aylik_cikis / REPORTING_WINDOW_DAYS
+        ewma_talep  = round(gunluk_ort * EWMA_ALPHA + gunluk_ort * (1 - EWMA_ALPHA), 2)
         kac_gun_yeter = round(u.current_stock / ewma_talep, 1) if ewma_talep > 0 else None
 
         sonuclar.append({
@@ -1454,12 +828,6 @@ def kar_marji_analizi(db: Session = Depends(get_db)):
 @app.get("/rapor/excel", dependencies=[Depends(role_required(["Admin", "Depo Müdürü"]))])
 def excel_rapor_indir(db: Session = Depends(get_db)):
     """Tüm ürün envanterini + kâr marjı hesaplamalarını .xlsx olarak indirir."""
-    import io
-    from fastapi.responses import StreamingResponse
-    import openpyxl
-    from openpyxl.styles import Font, PatternFill, Alignment
-    from openpyxl.utils import get_column_letter
-
     wb = openpyxl.Workbook()
 
     # ── SAYFA 1: ÜRÜN ENVANTERİ ──
@@ -1509,7 +877,7 @@ def excel_rapor_indir(db: Session = Depends(get_db)):
     ws2.append(["Tarih", "Ürün", "Tip", "Miktar", "Durum", "İşleyen", "Not"])
     ws2.cell(row=1, column=1).font = baslik_font
 
-    otuz_gun_once = datetime.datetime.utcnow() - datetime.timedelta(days=30)
+    otuz_gun_once = datetime.datetime.utcnow() - datetime.timedelta(days=REPORTING_WINDOW_DAYS)
     hareketler = db.query(models.InventoryTransaction)\
         .filter(models.InventoryTransaction.transaction_date >= otuz_gun_once)\
         .order_by(models.InventoryTransaction.transaction_date.desc()).all()
@@ -1552,14 +920,6 @@ def excel_rapor_indir(db: Session = Depends(get_db)):
 @app.get("/rapor/pdf", dependencies=[Depends(role_required(["Admin", "Depo Müdürü"]))])
 def pdf_rapor_indir(db: Session = Depends(get_db)):
     """Yönetici özet raporunu (Dashboard KPI + Kritik Stoklar + Kâr Marjı Top-5) PDF olarak indirir."""
-    import io
-    from fastapi.responses import StreamingResponse
-    from reportlab.lib.pagesizes import A4
-    from reportlab.lib import colors
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.units import cm
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, HRFlowable
-
     buffer = io.BytesIO()
     doc    = SimpleDocTemplate(buffer, pagesize=A4,
                                leftMargin=2*cm, rightMargin=2*cm,
@@ -1687,58 +1047,3 @@ def pdf_rapor_indir(db: Session = Depends(get_db)):
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
 
-# ==================================================
-# --- FAZ 2.9 (ENTERPRISE / CRM & UPSELL API) ---
-# ==================================================
-
-@app.post("/crm/musteri", dependencies=[Depends(role_required(["Admin", "Barista"]))])
-def crm_musteri_bul_veya_ekle(req: CustomerLookup, db: Session = Depends(get_db)):
-    cus = db.query(models.Customer).filter(models.Customer.phone_number == req.phone_number).first()
-    if not cus:
-        if not req.name: raise HTTPException(status_code=400, detail="Yeni kayıt; isim giriniz.")
-        cus = models.Customer(phone_number=req.phone_number, name=req.name)
-        db.add(cus); db.commit()
-    return {"id": cus.id, "name": cus.name, "phone": cus.phone_number, "points": cus.loyalty_points, "visits": cus.total_visits}
-
-@app.post("/pos/upsell-onerisi", dependencies=[Depends(role_required(["Admin", "Barista", "Depo Müdürü"]))])
-def upsell_onerisi(req: UpsellRequest, db: Session = Depends(get_db)):
-    if not req.current_item_ids: return {"oneriler": []}
-    items = db.query(models.MenuItem).filter(models.MenuItem.id.in_(req.current_item_ids)).all()
-    cats = [i.category.lower() for i in items if i.category]
-    has_coffee = any("kahve" in c or "soğuk" in c or "çay" in c for c in cats)
-    has_food = any("tatlı" in c or "pasta" in c or "sandviç" in c for c in cats)
-    
-    target = "Tatlılar" if has_coffee and not has_food else "Kahve" if has_food and not has_coffee else None
-    if target:
-        import random
-        oneriler = db.query(models.MenuItem).filter(models.MenuItem.category.like(f"%{target}%")).all()
-        if oneriler:
-            pick = random.choice(oneriler)
-            return {"oneriler": [{"id": pick.id, "name": pick.name, "price": pick.price, "emoji": pick.image_emoji}]}
-    return {"oneriler": []}
-
-@app.get("/crm/sorgula", dependencies=[Depends(role_required(["Admin", "Barista"]))])
-def crm_sorgula(phone: str, db: Session = Depends(get_db)):
-    cus = db.query(models.Customer).filter(models.Customer.phone_number == phone).first()
-    if not cus:
-        # Fly-by creation
-        cus = models.Customer(phone_number=phone, name="Yeni Müşteri")
-        db.add(cus)
-        db.commit()
-        db.refresh(cus)
-    return {"id": cus.id, "name": cus.name, "phone": cus.phone_number, "points": cus.loyalty_points, "visits": cus.total_visits}
-
-@app.get("/crm/musteriler", dependencies=[Depends(role_required(["Admin"]))])
-def crm_musteri_listesi(db: Session = Depends(get_db)):
-    customers = db.query(models.Customer).order_by(models.Customer.total_visits.desc()).all()
-    return [{"id": c.id, "name": c.name, "phone": c.phone_number, "points": c.loyalty_points, "visits": c.total_visits} for c in customers]
-
-@app.post("/crm/puan-harca/{customer_id}", dependencies=[Depends(role_required(["Admin", "Barista"]))])
-def crm_puan_harca(customer_id: int, db: Session = Depends(get_db)):
-    cus = db.query(models.Customer).filter(models.Customer.id == customer_id).first()
-    if not cus: raise HTTPException(status_code=404, detail="Müşteri bulunamadı")
-    if cus.loyalty_points < 9: raise HTTPException(status_code=400, detail="Yetersiz puan (En az 9 olmalı)")
-    
-    cus.loyalty_points -= 9
-    db.commit()
-    return {"mesaj": "9 Puan harcandı, hediye tanımlandı.", "yeni_puan": cus.loyalty_points}
