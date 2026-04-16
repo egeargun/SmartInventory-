@@ -1,6 +1,6 @@
 # schemas.py dosyası - Sadece Veri Şablonları (JSON Modelleri) Burada Durur
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Optional, List
 
 # 1. Stok Güncelleme Şablonu
@@ -23,6 +23,28 @@ class ProductCreate(BaseModel):
     abc_class: str = "C"
     expiration_date: Optional[str] = None # SKT (Termos için boş, Süt için dolu)
     warehouse_location: str = "Ana Depo"
+
+    @field_validator("sku")
+    @classmethod
+    def sku_not_blank(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("SKU boş olamaz / SKU cannot be blank")
+        return v
+
+    @field_validator("unit_cost", "unit_price")
+    @classmethod
+    def price_non_negative(cls, v: float) -> float:
+        if v < 0:
+            raise ValueError("Fiyat negatif olamaz / Price cannot be negative")
+        return v
+
+    @field_validator("current_stock", "reorder_point")
+    @classmethod
+    def stock_non_negative(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("Stok negatif olamaz / Stock cannot be negative")
+        return v
 
 class ProductUpdate(BaseModel):
     sku: Optional[str] = None
@@ -51,4 +73,32 @@ class StockTransaction(BaseModel):
 class TalepYaniti(BaseModel):
     yeni_durum: str # 'ONAYLANDI' veya 'İPTAL'
     yanitlayan_kisi: str = "Depo Müdürü"
+
+
+# --- Ürün Yaşam Döngüsü (Product Lifecycle) ---
+class LifecycleEvent(BaseModel):
+    date: str
+    stage: str            # CREATED, RECEIVED, CONSUMED, ADJUST, NEAR_EXPIRY, DEPLETED, EXPIRED
+    actor: str
+    quantity_delta: int
+    running_balance: int
+    source: Optional[str] = None
+    notes: Optional[str] = None
+
+class LifecycleSummary(BaseModel):
+    sku: str
+    name_tr: str
+    name_en: Optional[str] = None
+    current_stock: int
+    total_received: int
+    total_consumed: int
+    total_adjusted: int
+    days_on_hand: Optional[int] = None
+    turnover_ratio: Optional[float] = None
+    remaining_shelf_life_days: Optional[int] = None
+    expiration_date: Optional[str] = None
+
+class ProductLifecycleResponse(BaseModel):
+    summary: LifecycleSummary
+    timeline: List[LifecycleEvent]
 

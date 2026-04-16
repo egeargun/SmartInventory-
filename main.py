@@ -46,7 +46,7 @@ from auth import (
     create_refresh_token, decode_refresh_token,
     role_required, get_current_user,
 )
-from schemas import StockTransaction, ProductCreate, ProductUpdate, TalepYaniti
+from schemas import StockTransaction, ProductCreate, ProductUpdate, TalepYaniti, ProductLifecycleResponse, LifecycleSummary, LifecycleEvent
 
 
 
@@ -399,16 +399,43 @@ def service_worker():
 
 
 
-@app.post("/urun-ekle")
+@app.post("/urun-ekle", status_code=201)
 def urun_ekle(urun: ProductCreate, current_user: models.User = Depends(role_required(["Admin", "Depo Müdürü"])), db: Session = Depends(get_db)):
+    # Strict uniqueness guard — never upsert
+    mevcut = db.query(models.Product).filter(models.Product.sku == urun.sku).first()
+    if mevcut:
+        raise HTTPException(status_code=409, detail=f"Bu SKU zaten mevcut: {urun.sku} / SKU already exists: {urun.sku}")
+
     try:
-        yeni_urun = models.Product(**urun.dict())
+        # 1. Product INSERT
+        urun_dict = urun.model_dump()
+        yeni_urun = models.Product(**urun_dict)
         db.add(yeni_urun)
-        db.commit()
+        db.flush()  # get product_id without committing
+
+        # 2. Initial stock-in movement (uses existing InventoryTransaction table)
+        if urun.current_stock > 0:
+            hareket = models.InventoryTransaction(
+                product_id=yeni_urun.product_id,
+                quantity=urun.current_stock,
+                transaction_type="IN",
+                notes="Yeni ürün envantere eklendi / New product added to inventory",
+                processed_by=current_user.username,
+                status="ONAYLANDI",
+                source="initial_entry",
+            )
+            db.add(hareket)
+
+        # 3. Audit log (still inside same transaction)
         _log_audit(db, actor=current_user.username, role=current_user.role,
-                   action="PRODUCT_CREATE", resource=urun.name_tr,
-                   detail=f"SKU: {urun.sku} | Stok: {urun.current_stock}")
+                   action="PRODUCT_CREATE", resource=urun.sku,
+                   detail=f"SKU: {urun.sku} | Ad: {urun.name_tr} | Stok: {urun.current_stock}")
+
+        # Single commit — all three writes succeed or all roll back
+        db.commit()
         return {"mesaj": f"{urun.name_tr} veritabanına eklendi.", "product_id": yeni_urun.product_id}
+    except HTTPException:
+        raise
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Ekleme hatası: {str(e)}")
@@ -469,6 +496,182 @@ def stok_hareket_log(limit: int = 50, db: Session = Depends(get_db)):
             "transaction_date": h.transaction_date.isoformat() if h.transaction_date else None,
         })
     return {"log": sonuc}
+
+
+@app.get("/api/products/{sku}/lifecycle", response_model=ProductLifecycleResponse)
+def product_lifecycle(sku: str, current_user: models.User = Depends(role_required(["Admin", "Depo Müdürü"])), db: Session = Depends(get_db)):
+    """Aggregate lifecycle timeline for a single product by SKU."""
+    urun = db.query(models.Product).filter(models.Product.sku == sku).first()
+    if not urun:
+        raise HTTPException(status_code=404, detail=f"SKU '{sku}' bulunamadı.")
+
+    hareketler = (
+        db.query(models.InventoryTransaction)
+        .filter(models.InventoryTransaction.product_id == urun.product_id)
+        .order_by(models.InventoryTransaction.transaction_date.asc())
+        .all()
+    )
+
+    timeline = []
+    balance = 0
+    total_in = 0
+    total_out = 0
+    total_adj = 0
+    first_in_date = None
+
+    # CREATED event from audit log
+    created_log = (
+        db.query(models.AuditLog)
+        .filter(models.AuditLog.action == "PRODUCT_CREATE", models.AuditLog.resource == urun.name_tr)
+        .order_by(models.AuditLog.timestamp.asc())
+        .first()
+    )
+    if created_log:
+        timeline.append(LifecycleEvent(
+            date=created_log.timestamp.isoformat(),
+            stage="CREATED",
+            actor=created_log.actor,
+            quantity_delta=0,
+            running_balance=0,
+            source="Audit",
+            notes=created_log.detail,
+        ))
+
+    for h in hareketler:
+        if h.transaction_type == "IN":
+            total_in += h.quantity
+            balance += h.quantity
+            stage = "RECEIVED"
+            if first_in_date is None:
+                first_in_date = h.transaction_date
+        elif h.transaction_type == "OUT":
+            total_out += h.quantity
+            balance -= h.quantity
+            stage = "CONSUMED"
+        else:
+            total_adj += h.quantity
+            balance += h.quantity
+            stage = "ADJUST"
+
+        timeline.append(LifecycleEvent(
+            date=h.transaction_date.isoformat() if h.transaction_date else "",
+            stage=stage,
+            actor=h.processed_by or "System",
+            quantity_delta=h.quantity if h.transaction_type != "OUT" else -h.quantity,
+            running_balance=balance,
+            source=h.source or "Manuel",
+            notes=h.notes,
+        ))
+
+    # Near-expiry / expired synthetic events
+    now = datetime.datetime.utcnow().date()
+    if urun.expiration_date:
+        days_left = (urun.expiration_date - now).days
+        if days_left <= 0:
+            timeline.append(LifecycleEvent(
+                date=urun.expiration_date.isoformat(), stage="EXPIRED", actor="System",
+                quantity_delta=0, running_balance=balance, notes="SKT aşıldı / Expired",
+            ))
+        elif days_left <= SKT_ALERT_DAYS:
+            timeline.append(LifecycleEvent(
+                date=now.isoformat(), stage="NEAR_EXPIRY", actor="System",
+                quantity_delta=0, running_balance=balance, notes=f"{days_left} gün kaldı / {days_left} days left",
+            ))
+
+    # Depleted event
+    if urun.current_stock == 0 and total_in > 0:
+        last_out = next((h for h in reversed(hareketler) if h.transaction_type == "OUT"), None)
+        if last_out:
+            timeline.append(LifecycleEvent(
+                date=last_out.transaction_date.isoformat() if last_out.transaction_date else "",
+                stage="DEPLETED", actor=last_out.processed_by or "System",
+                quantity_delta=0, running_balance=0, notes="Stok tükendi / Stock depleted",
+            ))
+
+    # Summary metrics
+    days_on_hand = None
+    if first_in_date:
+        days_on_hand = (datetime.datetime.utcnow() - first_in_date).days
+
+    turnover_ratio = None
+    if total_in > 0 and days_on_hand and days_on_hand > 0:
+        avg_inventory = total_in / 2
+        if avg_inventory > 0:
+            turnover_ratio = round(total_out / avg_inventory, 2)
+
+    remaining_shelf = None
+    if urun.expiration_date:
+        remaining_shelf = (urun.expiration_date - now).days
+
+    summary = LifecycleSummary(
+        sku=urun.sku,
+        name_tr=urun.name_tr,
+        name_en=urun.name_en,
+        current_stock=urun.current_stock,
+        total_received=total_in,
+        total_consumed=total_out,
+        total_adjusted=total_adj,
+        days_on_hand=days_on_hand,
+        turnover_ratio=turnover_ratio,
+        remaining_shelf_life_days=remaining_shelf,
+        expiration_date=urun.expiration_date.isoformat() if urun.expiration_date else None,
+    )
+
+    return ProductLifecycleResponse(summary=summary, timeline=timeline)
+
+
+@app.get("/stok-yasam-dongusu", dependencies=[Depends(role_required(["Admin", "Depo Müdürü"]))])
+def stok_yasam_dongusu(db: Session = Depends(get_db)):
+    """Ürün bazında ilk giriş, son çıkış ve envanterde kalma süresi."""
+    from sqlalchemy import func
+
+    urunler = db.query(models.Product).all()
+    sonuc = []
+    for u in urunler:
+        hareketler = (
+            db.query(models.InventoryTransaction)
+            .filter(models.InventoryTransaction.product_id == u.product_id)
+            .order_by(models.InventoryTransaction.transaction_date.asc())
+            .all()
+        )
+        ilk_giris = None
+        son_cikis = None
+        for h in hareketler:
+            if h.transaction_type == "IN" and ilk_giris is None:
+                ilk_giris = h.transaction_date
+            if h.transaction_type == "OUT":
+                son_cikis = h.transaction_date
+
+        kalis_suresi = None
+        kalis_gun = None
+        if ilk_giris and son_cikis and son_cikis > ilk_giris:
+            delta = son_cikis - ilk_giris
+            kalis_gun = delta.days
+            saat = delta.seconds // 3600
+            dakika = (delta.seconds % 3600) // 60
+            kalis_suresi = f"{kalis_gun}g {saat}s {dakika}dk"
+        elif ilk_giris and not son_cikis:
+            delta = datetime.datetime.utcnow() - ilk_giris
+            kalis_gun = delta.days
+            saat = delta.seconds // 3600
+            dakika = (delta.seconds % 3600) // 60
+            kalis_suresi = f"{kalis_gun}g {saat}s {dakika}dk"
+
+        sonuc.append({
+            "product_id": u.product_id,
+            "sku": u.sku,
+            "name_tr": u.name_tr,
+            "name_en": u.name_en,
+            "current_stock": u.current_stock,
+            "ilk_giris": ilk_giris.isoformat() if ilk_giris else None,
+            "son_cikis": son_cikis.isoformat() if son_cikis else None,
+            "kalis_suresi": kalis_suresi,
+            "kalis_gun": kalis_gun,
+            "hala_depoda": son_cikis is None and ilk_giris is not None,
+            "hareket_sayisi": len(hareketler),
+        })
+    return {"data": sonuc}
+
 
 # --- GERÇEK ZAMANLI İŞLEM UÇ NOKTASI (ASYNC WEBSOCKET) ---
 @app.post("/stok-hareketi")

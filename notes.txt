@@ -56,3 +56,106 @@ ProductCreate: category_id / supplier_id are now Optional with defaults — so c
 Modal: single-language labels via data-tr/data-en, including the "Ürün Adı (Alternatif Dil)" field, Cancel/Save buttons, and modal title. Language toggle now also reloads the Stok Sipariş table so Edit/Sil buttons re-render.
 SKU autofill: picking an existing SKU auto-populates name, category, supplier, warehouse, prices, stock, SKT, ABC, and switches the modal into edit mode.
 Error surfacing: save and delete now show the real backend error (e.g., 422 field, 1451 FK) instead of a generic "İşlem başarısız".
+
+
+dördüncü değişiklikler
+Root cause: /urun-ekle did a blind db.add() with no SKU uniqueness check and no stock movement insert. On the frontend, _ssSkuAutofill() silently wrote a product_id into the hidden field when a user typed an existing SKU in create mode, turning the POST into a PUT.
+
+Changes made:
+
+File	What changed
+schemas.py:11-42	Added field_validator for SKU (non-blank), prices (non-negative), stock (non-negative)
+main.py:402-435	Rewrote /urun-ekle: explicit SKU uniqueness check → 409; db.flush() then InventoryTransaction(type=IN, source=initial_entry) insert + _log_audit() all in one db.commit()
+index.html:1109-1111	Button label: "Yeni Ürün" / "New Product"
+index.html:1606-1623	_ssSkuAutofill() now bails out when ss-product-id is empty (create mode) — never sets it
+index.html:1626-1640	_ssSave() now returns status code alongside ok/msg
+index.html:1690	Modal title for create: "Yeni Ürün" / "New Product"
+index.html:1699-1740	stokSiparisKaydet(): client-side required-field validation for create path; 409 handling keeps modal open with localized message
+tests/test_main.py:200-252	3 new tests: create with new SKU → 201 + stock movement verified, duplicate SKU → 409, negative stock → 422
+
+
+
+
+
+
+
+
+
+
+
+
+ 5. ÜRÜN EKLEME (CREATE) TESTLERİ lazım olursa kullanılabilir şimdilik notlarda dursun data üretmesin boş yere
+# ============================================================
+class TestProductCreate:
+    _test_sku = None  # cleanup reference
+
+    def _unique_sku(self):
+        import uuid
+        return f"TEST-{uuid.uuid4().hex[:8].upper()}"
+
+    def test_create_product_new_sku_201(self):
+        """New SKU → 201, product row + stock movement created."""
+        TestProductCreate._test_sku = self._unique_sku()
+        res = client.post("/urun-ekle", json={
+            "sku": TestProductCreate._test_sku,
+            "name_tr": "PyTest Ürün",
+            "name_en": "PyTest Product",
+            "unit_cost": 10.0,
+            "unit_price": 15.0,
+            "current_stock": 25,
+            "reorder_point": 5,
+            "abc_class": "B",
+            "warehouse_location": "Test Depo",
+        }, headers=admin_headers())
+        assert res.status_code == 201, f"Expected 201, got {res.status_code}: {res.text}"
+        data = res.json()
+        assert "product_id" in data
+        assert data["product_id"] > 0
+
+        # Verify stock movement was created (visible in stok-log)
+        log_res = client.get("/stok-log?limit=5", headers=admin_headers())
+        assert log_res.status_code == 200
+        logs = log_res.json()["log"]
+        matching = [l for l in logs if l["sku"] == TestProductCreate._test_sku and l["transaction_type"] == "IN"]
+        assert len(matching) >= 1, "Initial stock-in movement not found in stok-log"
+        assert matching[0]["quantity"] == 25
+
+    def test_create_product_duplicate_sku_409(self):
+        """Same SKU again → 409 Conflict, no row modified."""
+        sku = TestProductCreate._test_sku
+        if sku is None:
+            pytest.skip("Depends on test_create_product_new_sku_201")
+        res = client.post("/urun-ekle", json={
+            "sku": sku,
+            "name_tr": "Duplikat",
+            "name_en": "Duplicate",
+            "unit_cost": 1.0,
+            "unit_price": 2.0,
+            "current_stock": 5,
+        }, headers=admin_headers())
+        assert res.status_code == 409, f"Expected 409, got {res.status_code}: {res.text}"
+
+    def test_create_product_negative_stock_422(self):
+        """Negative stock → 422 validation error from Pydantic."""
+        res = client.post("/urun-ekle", json={
+            "sku": self._unique_sku(),
+            "name_tr": "Negatif",
+            "name_en": "Negative",
+            "current_stock": -5,
+        }, headers=admin_headers())
+        assert res.status_code == 422
+
+    @pytest.fixture(autouse=True, scope="class")
+    def cleanup(self):
+        """Clean up test products after all tests in this class."""
+        yield
+        # Delete test products by SKU
+        if TestProductCreate._test_sku:
+            hdrs = admin_headers()
+            res = client.get("/urunler?limit=200", headers=hdrs)
+            if res.status_code == 200:
+                for u in res.json().get("data", []):
+                    if u.get("sku", "").startswith("TEST-"):
+                        client.delete(f"/urun/{u['product_id']}", headers=hdrs)
+
+#=============================================#

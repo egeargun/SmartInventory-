@@ -647,6 +647,15 @@
           📋 Stok Sipariş Yönetimi
         </div>
         <div
+          id="nav-yasam-dongusu"
+          class="nav-item"
+          onclick="tabDegistir('tab-yasam-dongusu', this)"
+          data-tr="🔄 Ürün Yaşam Döngüsü"
+          data-en="🔄 Product Lifecycle"
+        >
+          🔄 Ürün Yaşam Döngüsü
+        </div>
+        <div
           id="nav-audit"
           class="nav-item"
           onclick="tabDegistir('tab-audit', this)"
@@ -1098,8 +1107,8 @@
               📋 Stok Sipariş Yönetimi
             </h3>
             <button class="btn btn-shimmer" onclick="stokSiparisFormAc(null)"
-                    data-tr="➕ Yeni Ürün Siparişi" data-en="➕ New Product Order">
-              ➕ Yeni Ürün Siparişi
+                    data-tr="➕ Yeni Ürün" data-en="➕ New Product">
+              ➕ Yeni Ürün
             </button>
           </div>
           <p style="color:var(--text-muted); margin-top:8px;"
@@ -1199,7 +1208,40 @@
         </div>
       </div>
 
-      <!-- 6. AUDIT TRAIL (GÜVENLİK DENETİM KAYDEDICİSİ) -->
+      <!-- 6. ÜRÜN YAŞAM DÖNGÜSÜ -->
+      <div id="tab-yasam-dongusu" class="tab-content">
+        <div class="table-container">
+          <h3 style="margin-top:0; color: var(--accent-purple)"
+              data-tr="🔄 Ürün Yaşam Döngüsü (Giriş / Çıkış / Kalış Süresi)"
+              data-en="🔄 Product Lifecycle (Entry / Exit / Duration)">
+            🔄 Ürün Yaşam Döngüsü
+          </h3>
+          <p style="color:var(--text-muted); margin-top:0;"
+             data-tr="Her ürünün envantere ilk giriş tarihi, son çıkış tarihi ve depoda ne kadar kaldığı."
+             data-en="First entry date, last exit date and how long each product stayed in inventory.">
+            Her ürünün envantere ilk giriş tarihi, son çıkış tarihi ve depoda ne kadar kaldığı.
+          </p>
+          <table>
+            <thead>
+              <tr>
+                <th data-tr="Kod (SKU)" data-en="Code (SKU)">Kod (SKU)</th>
+                <th data-tr="Ürün Adı" data-en="Product Name">Ürün Adı</th>
+                <th data-tr="Mevcut Stok" data-en="Current Stock">Mevcut Stok</th>
+                <th data-tr="İlk Giriş" data-en="First Entry">İlk Giriş</th>
+                <th data-tr="Son Çıkış" data-en="Last Exit">Son Çıkış</th>
+                <th data-tr="Kalış Süresi" data-en="Duration">Kalış Süresi</th>
+                <th data-tr="Durum" data-en="Status">Durum</th>
+                <th data-tr="Hareket" data-en="Movements">Hareket</th>
+              </tr>
+            </thead>
+            <tbody id="yasam-dongusu-table">
+              <tr><td colspan="8" style="text-align:center" data-tr="Yükleniyor..." data-en="Loading...">Yükleniyor...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 7. AUDIT TRAIL (GÜVENLİK DENETİM KAYDEDICİSİ) -->
       <div id="tab-audit" class="tab-content">
         <div class="table-container">
           <button
@@ -1488,6 +1530,7 @@
           "nav-audit",
           "nav-pending-users",
           "nav-stok-siparis",
+          "nav-yasam-dongusu",
         ];
         const hideForDepo = ["nav-audit", "nav-talepler", "nav-pending-users"];
         let toHide = [];
@@ -1563,9 +1606,12 @@
       function _ssSkuAutofill() {
         const sku = document.getElementById("ss-sku").value.trim();
         if (!sku) return;
+        const pid = document.getElementById("ss-product-id").value;
+        // Only autofill when editing (pid already set). In create mode, never
+        // set ss-product-id — that would turn a create into an update.
+        if (!pid) return;
         const u = _stokSiparisCache.find((x) => (x.sku || "").toLowerCase() === sku.toLowerCase());
         if (!u) return;
-        document.getElementById("ss-product-id").value = u.product_id;
         document.getElementById("ss-warehouse").value = u.warehouse_location || "";
         document.getElementById("ss-name-tr").value = u.name_tr || "";
         document.getElementById("ss-name-en").value = u.name_en || "";
@@ -1577,7 +1623,6 @@
         document.getElementById("ss-reorder-point").value = u.reorder_point || 10;
         document.getElementById("ss-expiration").value = u.expiration_date || "";
         document.getElementById("ss-abc").value = u.abc_class || "C";
-        document.getElementById("stok-siparis-modal-baslik").innerText = t("Ürünü Düzenle","Edit Product");
       }
 
       async function _ssSave(endpoint, method, body) {
@@ -1588,11 +1633,11 @@
           const data = await res.json().catch(() => ({}));
           if (!res.ok) {
             const msg = (data && (data.detail || data.mesaj)) || `HTTP ${res.status}`;
-            return { ok: false, msg: typeof msg === "string" ? msg : JSON.stringify(msg) };
+            return { ok: false, status: res.status, msg: typeof msg === "string" ? msg : JSON.stringify(msg) };
           }
-          return { ok: true, msg: data.mesaj || t("Başarılı","Success") };
+          return { ok: true, status: res.status, msg: data.mesaj || t("Başarılı","Success") };
         } catch (e) {
-          return { ok: false, msg: e.message || "Network error" };
+          return { ok: false, status: 0, msg: e.message || "Network error" };
         }
       }
 
@@ -1644,7 +1689,7 @@
             document.getElementById("ss-expiration").value = u.expiration_date || "";
           }
         } else {
-          baslik.innerText = t("Yeni Ürün Siparişi","New Product Order");
+          baslik.innerText = t("Yeni Ürün","New Product");
         }
         modal.style.display = "flex";
       }
@@ -1655,15 +1700,35 @@
 
       async function stokSiparisKaydet() {
         const pid = document.getElementById("ss-product-id").value;
+        const sku = document.getElementById("ss-sku").value.trim();
+        const nameTr = document.getElementById("ss-name-tr").value.trim();
+        const unitCost = parseFloat(document.getElementById("ss-unit-cost").value);
+        const unitPrice = parseFloat(document.getElementById("ss-unit-price").value);
+        const currentStock = parseInt(document.getElementById("ss-current-stock").value);
+
+        // Client-side validation for create path
+        if (!pid) {
+          const missing = [];
+          if (!sku) missing.push(t("Kod (SKU)","Code (SKU)"));
+          if (!nameTr) missing.push(t("Ürün Adı","Product Name"));
+          if (isNaN(unitCost) || unitCost < 0) missing.push(t("Birim Maliyet (≥0)","Unit Cost (≥0)"));
+          if (isNaN(unitPrice) || unitPrice < 0) missing.push(t("Birim Fiyat (≥0)","Unit Price (≥0)"));
+          if (isNaN(currentStock) || currentStock < 0) missing.push(t("Stok Miktarı (≥0)","Stock Qty (≥0)"));
+          if (missing.length > 0) {
+            alert(t("Zorunlu alanlar eksik veya geçersiz:\n","Required fields missing or invalid:\n") + missing.join("\n"));
+            return;
+          }
+        }
+
         const payload = {
-          sku: document.getElementById("ss-sku").value.trim(),
-          name_tr: document.getElementById("ss-name-tr").value.trim(),
+          sku: sku,
+          name_tr: nameTr,
           name_en: document.getElementById("ss-name-en").value.trim(),
           category_id: parseInt(document.getElementById("ss-category-id").value) || null,
           supplier_id: parseInt(document.getElementById("ss-supplier-id").value) || null,
-          unit_cost: parseFloat(document.getElementById("ss-unit-cost").value) || 0,
-          unit_price: parseFloat(document.getElementById("ss-unit-price").value) || 0,
-          current_stock: parseInt(document.getElementById("ss-current-stock").value) || 0,
+          unit_cost: isNaN(unitCost) ? 0 : unitCost,
+          unit_price: isNaN(unitPrice) ? 0 : unitPrice,
+          current_stock: isNaN(currentStock) ? 0 : currentStock,
           reorder_point: parseInt(document.getElementById("ss-reorder-point").value) || 10,
           abc_class: document.getElementById("ss-abc").value.trim() || "C",
           expiration_date: document.getElementById("ss-expiration").value || null,
@@ -1675,7 +1740,10 @@
         if (result.ok) {
           alert(result.msg);
           stokSiparisFormKapat();
-          loadStokSiparis();
+          loadStokSiparis(); // reloads both product table and stock log
+        } else if (result.status === 409) {
+          // SKU conflict — keep modal open so user can fix the SKU
+          alert(t("Bu SKU zaten mevcut. Lütfen farklı bir SKU girin.","This SKU already exists. Please enter a different SKU."));
         } else {
           alert(t("İşlem başarısız: ","Operation failed: ") + result.msg);
         }
@@ -1689,6 +1757,37 @@
           loadStokSiparis();
         } else {
           alert(t("Silme başarısız: ","Delete failed: ") + result.msg);
+        }
+      }
+
+      async function loadYasamDongusu() {
+        const tbl = document.getElementById("yasam-dongusu-table");
+        if (!tbl) return;
+        const data = await apiIstek("/stok-yasam-dongusu");
+        if (data && data.data && data.data.length > 0) {
+          tbl.innerHTML = "";
+          data.data.forEach((u) => {
+            const ad = currentLang === "TR" ? u.name_tr : (u.name_en || u.name_tr);
+            const giris = u.ilk_giris ? new Date(u.ilk_giris).toLocaleString() : "-";
+            const cikis = u.son_cikis ? new Date(u.son_cikis).toLocaleString() : "-";
+            const sure = u.kalis_suresi || "-";
+            const durum = u.hala_depoda
+              ? `<span style="color:var(--accent-green);font-weight:bold">${t("Depoda","In Stock")}</span>`
+              : (u.ilk_giris ? `<span style="color:var(--accent-red);font-weight:bold">${t("Çıkış Yapıldı","Exited")}</span>` : `<span style="color:var(--text-muted)">${t("Hareket Yok","No Movement")}</span>`);
+            const stokRenk = u.current_stock < 15 ? "color:var(--accent-red);font-weight:bold" : "color:var(--accent-green);font-weight:bold";
+            tbl.innerHTML += `<tr>
+              <td><code>${u.sku || "-"}</code></td>
+              <td><b>${ad}</b></td>
+              <td style="${stokRenk}">${u.current_stock}</td>
+              <td>${giris}</td>
+              <td>${cikis}</td>
+              <td><b>${sure}</b></td>
+              <td>${durum}</td>
+              <td>${u.hareket_sayisi}</td>
+            </tr>`;
+          });
+        } else {
+          tbl.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#94a3b8">${t("Kayıt yok.","No records.")}</td></tr>`;
         }
       }
 
@@ -1756,6 +1855,9 @@
         verileriCek();
         if (tabID === "tab-stok-siparis" && typeof loadStokSiparis === "function") {
           loadStokSiparis();
+        }
+        if (tabID === "tab-yasam-dongusu" && typeof loadYasamDongusu === "function") {
+          loadYasamDongusu();
         }
       }
 
