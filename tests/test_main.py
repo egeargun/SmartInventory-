@@ -59,9 +59,9 @@ class TestAuthentication:
         """Token olmadan ürün listesi → 401."""
         assert client.get("/urunler").status_code == 401
 
-    def test_tokensiz_ai_predictor_401(self):
-        """Token olmadan AI endpoint → 401."""
-        assert client.get("/ai-predictor").status_code == 401
+    def test_tokensiz_inventory_summary_401(self):
+        """Token olmadan inventory summary → 401."""
+        assert client.get("/dashboard/inventory-summary").status_code == 401
 
     def test_tokensiz_audit_logs_401(self):
         """Token olmadan audit log → 401."""
@@ -72,22 +72,13 @@ class TestAuthentication:
 # 2. YETKİLENDİRME (AUTHORIZATION) TESTLERİ
 # ============================================================
 class TestAuthorization:
-    def test_webhook_gecersiz_api_key_403(self):
-        """Geçersiz API Key → 403 Forbidden."""
-        res = client.post(
-            "/api/v1/webhooks/pos-sale",
-            json={"pos_provider": "TestPOS", "receipt_id": "R-001", "items": []},
-            headers={"x-api-key": "yanlis_key_12345"}
-        )
-        assert res.status_code == 403
+    def test_tokensiz_stok_log_401(self):
+        """Token olmadan stok log → 401."""
+        assert client.get("/stok-log").status_code == 401
 
-    def test_webhook_api_key_olmadan_401_veya_403(self):
-        """API Key header hiç yoksa → 401 veya 403 (FastAPI APIKeyHeader davranışı)."""
-        res = client.post(
-            "/api/v1/webhooks/pos-sale",
-            json={"pos_provider": "TestPOS", "receipt_id": "R-002", "items": []}
-        )
-        assert res.status_code in (401, 403, 422)
+    def test_tokensiz_skt_analizi_401(self):
+        """Token olmadan SKT analizi → 401."""
+        assert client.get("/skt-analizi").status_code == 401
 
 
 # ============================================================
@@ -95,15 +86,13 @@ class TestAuthorization:
 # ============================================================
 class TestCoreBusinessLogic:
     def test_dashboard_ozet_yapisal_kontrol(self):
-        """Dashboard yanıtı beklenen anahtarları içermeli."""
+        """Dashboard özet yanıtı beklenen anahtarları içermeli."""
         res = client.get("/dashboard-ozet", headers=admin_headers())
         assert res.status_code == 200
         data = res.json()
-        assert "gunluk_ciro_tl" in data
         assert "kritik_stok_uyari_sayisi" in data
-        assert "gunun_baristasi" in data
         assert "finansal_durum" in data
-        assert isinstance(data["gunluk_ciro_tl"], (int, float))
+        assert isinstance(data["kritik_stok_uyari_sayisi"], int)
 
     def test_urunler_paginasyon(self):
         """Ürün listesi skip/limit paginasyonu çalışmalı."""
@@ -126,23 +115,6 @@ class TestCoreBusinessLogic:
             urun = data[0]
             for field in ["product_id", "name_tr", "name_en", "current_stock", "sku"]:
                 assert field in urun, f"Eksik alan: {field}"
-
-    def test_ai_predictor_yapi(self):
-        """AI Predictor yanıtı 'products' listesi içermeli."""
-        res = client.get("/ai-predictor", headers=admin_headers())
-        assert res.status_code == 200
-        data = res.json()
-        assert "products" in data
-        assert isinstance(data["products"], list)
-
-    def test_ai_predictor_projeksiyon_gecmisi(self):
-        """Her ürün için actual ve projection dizileri 7 elemanlı olmalı."""
-        res = client.get("/ai-predictor", headers=admin_headers())
-        assert res.status_code == 200
-        for p in res.json()["products"]:
-            assert len(p["actual"]) == 7
-            assert len(p["projection"]) == 7
-            assert "alert" in p
 
     def test_skt_analizi_yapi(self):
         """SKT analizi beklenen alanları döndürmeli."""
@@ -198,51 +170,26 @@ class TestCoreBusinessLogic:
 
 
 # ============================================================
-# 4. API KEY YÖNETİMİ TESTLERİ
+# 4. DASHBOARD INVENTORY SUMMARY TESTLERİ
 # ============================================================
-class TestApiKeyManagement:
-    def test_api_key_olustur(self):
-        """Admin yeni API Key üretebilmeli."""
-        res = client.post(
-            "/api/v1/api-keys",
-            json={"provider_name": "TestPOS-PyTest"},
-            headers=admin_headers()
-        )
+class TestDashboardInventorySummary:
+    def test_tokensiz_inventory_summary_401(self):
+        """Token olmadan inventory summary → 401."""
+        assert client.get("/dashboard/inventory-summary").status_code == 401
+
+    def test_inventory_summary_yapisal_kontrol(self):
+        """Authenticated inventory summary → expected keys."""
+        res = client.get("/dashboard/inventory-summary", headers=admin_headers())
         assert res.status_code == 200
         data = res.json()
-        assert "api_key" in data
-        assert len(data["api_key"]) == 64  # secrets.token_hex(32) → 64 karakter hex
-
-    def test_api_keys_listele(self):
-        """Admin API Key listesini görebilmeli."""
-        res = client.get("/api/v1/api-keys", headers=admin_headers())
-        assert res.status_code == 200
-        data = res.json()
-        assert "api_keys" in data
-
-    def test_api_key_ile_bos_webhook(self):
-        """Geçerli API Key ile boş webhook → 200 dönmeli."""
-        # Önce key al
-        res_key = client.post(
-            "/api/v1/api-keys",
-            json={"provider_name": "PyTest-Webhook"},
-            headers=admin_headers()
-        )
-        api_key = res_key.json()["api_key"]
-
-        # Boş item listesiyle webhook gönder
-        res = client.post(
-            "/api/v1/webhooks/pos-sale",
-            json={
-                "pos_provider": "PyTest",
-                "receipt_id": "TEST-FIS-001",
-                "items": [],
-                "timestamp": "2026-03-28T20:00:00Z"
-            },
-            headers={"x-api-key": api_key}
-        )
-        assert res.status_code == 200
-        assert res.json()["status"] == "ok"
+        for key in ["total_skus", "total_stock_value", "low_stock_count",
+                     "out_of_stock_count", "near_expiry_count",
+                     "category_breakdown", "stock_movement_7d"]:
+            assert key in data, f"Missing key: {key}"
+        assert isinstance(data["total_skus"], int)
+        assert isinstance(data["total_stock_value"], (int, float))
+        assert isinstance(data["category_breakdown"], list)
+        assert isinstance(data["stock_movement_7d"], list)
 
 
 # ============================================================

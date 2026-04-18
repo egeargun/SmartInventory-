@@ -732,6 +732,77 @@ async def stok_hareketi_kaydet(hareket: StockTransaction, background_tasks: Back
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/dashboard/inventory-summary", dependencies=[Depends(role_required(["Admin", "Depo Müdürü", "Barista"]))])
+def dashboard_inventory_summary(db: Session = Depends(get_db)):
+    """Live inventory summary powering all dashboard KPIs and charts."""
+    bugun = datetime.date.today()
+    skt_esik = bugun + datetime.timedelta(days=SKT_ALERT_DAYS)
+
+    total_skus = db.query(func.count(models.Product.product_id)).scalar() or 0
+    total_stock_value = db.query(func.sum(models.Product.current_stock * models.Product.unit_cost)).scalar() or 0
+    low_stock_count = db.query(func.count(models.Product.product_id)).filter(
+        models.Product.current_stock <= models.Product.reorder_point,
+        models.Product.current_stock > 0
+    ).scalar() or 0
+    out_of_stock_count = db.query(func.count(models.Product.product_id)).filter(
+        models.Product.current_stock == 0
+    ).scalar() or 0
+    near_expiry_count = db.query(func.count(models.Product.product_id)).filter(
+        models.Product.expiration_date.isnot(None),
+        models.Product.expiration_date <= skt_esik,
+        models.Product.current_stock > 0
+    ).scalar() or 0
+
+    # Category breakdown for pie chart
+    cat_rows = db.query(
+        models.Category.name_tr,
+        models.Category.name_en,
+        func.sum(models.Product.current_stock).label("total_stock"),
+        func.sum(models.Product.current_stock * models.Product.unit_cost).label("total_value"),
+    ).join(models.Product, models.Category.category_id == models.Product.category_id
+    ).group_by(models.Category.category_id, models.Category.name_tr, models.Category.name_en
+    ).all()
+    category_breakdown = [
+        {"category_tr": r.name_tr, "category_en": r.name_en,
+         "total_stock": int(r.total_stock or 0), "total_value": float(r.total_value or 0)}
+        for r in cat_rows
+    ]
+
+    # Stock movements last 7 days for bar chart
+    yedi_gun_once = datetime.datetime.utcnow() - datetime.timedelta(days=7)
+    move_rows = db.query(
+        func.date(models.InventoryTransaction.transaction_date).label("dt"),
+        models.InventoryTransaction.transaction_type,
+        func.sum(models.InventoryTransaction.quantity).label("toplam"),
+    ).filter(
+        models.InventoryTransaction.transaction_date >= yedi_gun_once
+    ).group_by(
+        func.date(models.InventoryTransaction.transaction_date),
+        models.InventoryTransaction.transaction_type
+    ).all()
+
+    day_map = {}
+    for r in move_rows:
+        d = str(r.dt)
+        if d not in day_map:
+            day_map[d] = {"date": d, "stock_in": 0, "stock_out": 0}
+        if r.transaction_type == "IN":
+            day_map[d]["stock_in"] = int(r.toplam or 0)
+        elif r.transaction_type == "OUT":
+            day_map[d]["stock_out"] = int(r.toplam or 0)
+    stock_movement_7d = sorted(day_map.values(), key=lambda x: x["date"])
+
+    return {
+        "total_skus": total_skus,
+        "total_stock_value": round(float(total_stock_value), 2),
+        "low_stock_count": low_stock_count,
+        "out_of_stock_count": out_of_stock_count,
+        "near_expiry_count": near_expiry_count,
+        "category_breakdown": category_breakdown,
+        "stock_movement_7d": stock_movement_7d,
+    }
+
+
 @app.get("/dashboard-ozet", dependencies=[Depends(role_required(["Admin", "Depo Müdürü"]))])
 def dashboard_ozet(db: Session = Depends(get_db)):
     yatirim = db.query(func.sum(models.Product.current_stock * models.Product.unit_cost)).scalar() or 0

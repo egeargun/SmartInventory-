@@ -598,6 +598,7 @@
     <!-- Canlı Bildirim Merkezi -->
     <div id="toastArea"></div>
 
+    <div id="appContainer" style="display:none; width:100%; min-height:100vh;">
     <div class="sidebar">
       <div class="logo">🏛️ V2 Lojistik Sistemi</div>
       <div class="nav-links">
@@ -614,7 +615,7 @@
           id="nav-depo"
           class="nav-item"
           onclick="tabDegistir('tab-depo', this)"
-          data-tr="📦 Tam Depo Envanteri"
+          data-tr="📦 Ana Depo Envanteri"
           data-en="📦 General Warehouse"
         >
           📦 Ana Depo Envanteri
@@ -754,51 +755,43 @@
       </div>
 
       <!-- 1. DASHBOARD -->
-      <div id="tab-dashboard" class="tab-content active">
+      <div id="tab-dashboard" class="tab-content">
         <div class="stats-grid">
           <div class="stat-card card-blue">
-            <div
-              class="stat-title"
-              data-tr="Aylık Fire Maliyeti"
-              data-en="Monthly Spoilage Cost"
-            >
-              Aylık Fire Zararı (LIFO)
-            </div>
-            <div class="stat-value" id="fire-zarari" style="font-size: 1.4rem">
-              ...
-            </div>
+            <div class="stat-title" data-tr="Toplam SKU" data-en="Total SKUs">Toplam SKU</div>
+            <div class="stat-value" id="kpi-total-skus" style="font-size: 1.4rem">...</div>
+          </div>
+          <div class="stat-card card-green">
+            <div class="stat-title" data-tr="Toplam Stok Değeri" data-en="Total Stock Value">Toplam Stok Değeri</div>
+            <div class="stat-value" id="kpi-stock-value" style="font-size: 1.4rem">...</div>
           </div>
           <div class="stat-card card-red">
-            <div
-              class="stat-title"
-              data-tr="Kritik Stok Bildirimleri"
-              data-en="Critical Stock Alerts"
-            >
-              Kritik Hammadde Alarmı
-            </div>
-            <div class="stat-value" id="kritik-stok" style="font-size: 1.4rem">
-              ...
-            </div>
+            <div class="stat-title" data-tr="Düşük Stok Uyarıları" data-en="Low Stock Alerts">Düşük Stok Uyarıları</div>
+            <div class="stat-value" id="kpi-low-stock" style="font-size: 1.4rem">...</div>
+          </div>
+          <div class="stat-card card-purple">
+            <div class="stat-title" data-tr="SKT Yaklaşan Ürünler" data-en="Near Expiry Items">SKT Yaklaşan Ürünler</div>
+            <div class="stat-value" id="kpi-near-expiry" style="font-size: 1.4rem">...</div>
           </div>
         </div>
         <div class="charts-grid">
           <div class="chart-container">
             <h3
               style="margin-top: 0"
-              data-tr="Lojistik Çıkış Eğilimi (Son 7 Gün)"
-              data-en="Logistics Outflow Trend (Last 7 Days)"
+              data-tr="Stok Hareketleri (Son 7 Gün)"
+              data-en="Stock Movements (Last 7 Days)"
             >
-              Lojistik Çıkış Eğilimi (Son 7 Gün)
+              Stok Hareketleri (Son 7 Gün)
             </h3>
-            <canvas id="lineChart" style="max-height: 250px"></canvas>
+            <canvas id="barChart" style="max-height: 250px"></canvas>
           </div>
           <div class="chart-container">
             <h3
               style="margin-top: 0"
-              data-tr="Tüketim Dağılımı (Kümülatif Kırılım)"
-              data-en="Consumption Distribution (Cumulative)"
+              data-tr="Kategoriye Göre Stok Dağılımı"
+              data-en="Stock Distribution by Category"
             >
-              Tüketim Dağılımı (Kümülatif Kırılım)
+              Kategoriye Göre Stok Dağılımı
             </h3>
             <canvas id="pieChart" style="max-height: 250px"></canvas>
           </div>
@@ -806,7 +799,7 @@
 
         <!-- AI LOJİSTİK ASİSTANI EKLENTİSİ -->
         <div style="display: flex; gap: 15px; margin-top: 15px">
-          <button
+          <!-- <button
             class="btn btn-shimmer"
             onclick="aiRaporOlustur()"
             style="
@@ -821,7 +814,7 @@
             data-en="🤖 Start AI Logistics Reporter"
           >
             🤖 AI Lojistik Raporatörü Başlat
-          </button>
+          </button> -->
           <button
             class="btn"
             onclick="exportDashboardToPDF()"
@@ -1067,31 +1060,38 @@
         </div>
       </div>
 
-
       <!-- PENDING USERS (Admin Approval) -->
       <div id="tab-pending-users" class="tab-content">
         <div class="table-container">
-          <h3 style="margin-top: 0; color: var(--accent-blue)"
-              data-tr="👤 Onay Bekleyen Kullanıcılar"
-              data-en="👤 Users Awaiting Approval">
+          <h3
+            style="margin-top: 0; color: var(--accent-blue)"
+            data-tr="👤 Onay Bekleyen Kullanıcılar"
+            data-en="👤 Users Awaiting Approval"
+          >
             👤 Onay Bekleyen Kullanıcılar
           </h3>
-          <p style="color: var(--text-muted); margin-top: 0"
-             data-tr="Yeni kayıt olan kullanıcılar burada onayınızı beklemektedir."
-             data-en="Newly registered users are awaiting your approval here.">
+          <p
+            style="color: var(--text-muted); margin-top: 0"
+            data-tr="Yeni kayıt olan kullanıcılar burada onayınızı beklemektedir."
+            data-en="Newly registered users are awaiting your approval here."
+          >
             Yeni kayıt olan kullanıcılar burada onayınızı beklemektedir.
           </p>
           <table>
             <thead>
               <tr>
                 <th>ID</th>
-                <th data-tr="Kullanıcı Adı" data-en="Username">Kullanıcı Adı</th>
+                <th data-tr="Kullanıcı Adı" data-en="Username">
+                  Kullanıcı Adı
+                </th>
                 <th data-tr="Rol" data-en="Role">Rol</th>
                 <th data-tr="İşlem" data-en="Action">İşlem</th>
               </tr>
             </thead>
             <tbody id="pending-users-table">
-              <tr><td colspan="4" style="text-align:center">Yükleniyor...</td></tr>
+              <tr>
+                <td colspan="4" style="text-align: center">Yükleniyor...</td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -1100,21 +1100,38 @@
       <!-- STOK SİPARİŞ YÖNETİMİ -->
       <div id="tab-stok-siparis" class="tab-content">
         <div class="table-container">
-          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
-            <h3 style="margin:0; color: var(--accent-blue)"
-                data-tr="📋 Stok Sipariş Yönetimi"
-                data-en="📋 Stock Order Management">
+          <div
+            style="
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              flex-wrap: wrap;
+              gap: 10px;
+            "
+          >
+            <h3
+              style="margin: 0; color: var(--accent-blue)"
+              data-tr="📋 Stok Sipariş Yönetimi"
+              data-en="📋 Stock Order Management"
+            >
               📋 Stok Sipariş Yönetimi
             </h3>
-            <button class="btn btn-shimmer" onclick="stokSiparisFormAc(null)"
-                    data-tr="➕ Yeni Ürün" data-en="➕ New Product">
+            <button
+              class="btn btn-shimmer"
+              onclick="stokSiparisFormAc(null)"
+              data-tr="➕ Yeni Ürün"
+              data-en="➕ New Product"
+            >
               ➕ Yeni Ürün
             </button>
           </div>
-          <p style="color:var(--text-muted); margin-top:8px;"
-             data-tr="Ürün kalemlerini oluşturun, düzenleyin veya silin. Stok giriş/çıkış kayıtları aşağıdaki denetim günlüğünde tutulur."
-             data-en="Create, edit or delete product items. Stock in/out records are kept in the audit log below.">
-            Ürün kalemlerini oluşturun, düzenleyin veya silin. Stok giriş/çıkış kayıtları aşağıdaki denetim günlüğünde tutulur.
+          <p
+            style="color: var(--text-muted); margin-top: 8px"
+            data-tr="Ürün kalemlerini oluşturun, düzenleyin veya silin. Stok giriş/çıkış kayıtları aşağıdaki denetim günlüğünde tutulur."
+            data-en="Create, edit or delete product items. Stock in/out records are kept in the audit log below."
+          >
+            Ürün kalemlerini oluşturun, düzenleyin veya silin. Stok giriş/çıkış
+            kayıtları aşağıdaki denetim günlüğünde tutulur.
           </p>
           <table>
             <thead>
@@ -1122,24 +1139,42 @@
                 <th data-tr="Kod (SKU)" data-en="Code (SKU)">Kod (SKU)</th>
                 <th data-tr="Ürün Adı" data-en="Product Name">Ürün Adı</th>
                 <th data-tr="Mal Grubu" data-en="Category">Mal Grubu</th>
-                <th data-tr="Tedarikçi Şirket" data-en="Supplier">Tedarikçi Şirket</th>
-                <th data-tr="Fiziki Raf (Lokasyon)" data-en="Physical Shelf (Location)">Fiziki Raf</th>
-                <th data-tr="LIFO Hedef (SKT)" data-en="LIFO Target (Expiration)">LIFO Hedef (SKT)</th>
-                <th data-tr="Bakiye (Stok)" data-en="Balance (Stock)">Bakiye</th>
+                <th data-tr="Tedarikçi Şirket" data-en="Supplier">
+                  Tedarikçi Şirket
+                </th>
+                <th
+                  data-tr="Fiziki Raf (Lokasyon)"
+                  data-en="Physical Shelf (Location)"
+                >
+                  Fiziki Raf
+                </th>
+                <th
+                  data-tr="LIFO Hedef (SKT)"
+                  data-en="LIFO Target (Expiration)"
+                >
+                  LIFO Hedef (SKT)
+                </th>
+                <th data-tr="Bakiye (Stok)" data-en="Balance (Stock)">
+                  Bakiye
+                </th>
                 <th data-tr="Değer (Fiyat)" data-en="Value (Price)">Değer</th>
                 <th data-tr="İşlem" data-en="Action">İşlem</th>
               </tr>
             </thead>
             <tbody id="stok-siparis-table">
-              <tr><td colspan="9" style="text-align:center">Yükleniyor...</td></tr>
+              <tr>
+                <td colspan="9" style="text-align: center">Yükleniyor...</td>
+              </tr>
             </tbody>
           </table>
         </div>
 
-        <div class="table-container" style="margin-top: 20px;">
-          <h3 style="margin-top:0; color: var(--accent-purple)"
-              data-tr="📝 Stok Hareket Günlüğü (Kim, Ne Yaptı)"
-              data-en="📝 Stock Movement Log (Who did what)">
+        <div class="table-container" style="margin-top: 20px">
+          <h3
+            style="margin-top: 0; color: var(--accent-purple)"
+            data-tr="📝 Stok Hareket Günlüğü (Kim, Ne Yaptı)"
+            data-en="📝 Stock Movement Log (Who did what)"
+          >
             📝 Stok Hareket Günlüğü
           </h3>
           <table>
@@ -1156,53 +1191,222 @@
               </tr>
             </thead>
             <tbody id="stok-log-table">
-              <tr><td colspan="8" style="text-align:center">Yükleniyor...</td></tr>
+              <tr>
+                <td colspan="8" style="text-align: center">Yükleniyor...</td>
+              </tr>
             </tbody>
           </table>
         </div>
 
         <!-- Modal Form -->
-        <div id="stok-siparis-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:9999; align-items:center; justify-content:center;">
-          <div style="background:var(--bg-panel, #1a1f2e); padding:25px; border-radius:14px; width:95%; max-width:560px; border:1px solid var(--border); max-height:90vh; overflow-y:auto;">
-            <h3 id="stok-siparis-modal-baslik" style="margin-top:0;" data-tr="Yeni Ürün" data-en="New Product">Yeni Ürün</h3>
+        <div
+          id="stok-siparis-modal"
+          style="
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 9999;
+            align-items: center;
+            justify-content: center;
+          "
+        >
+          <div
+            style="
+              background: var(--bg-panel, #1a1f2e);
+              padding: 25px;
+              border-radius: 14px;
+              width: 95%;
+              max-width: 560px;
+              border: 1px solid var(--border);
+              max-height: 90vh;
+              overflow-y: auto;
+            "
+          >
+            <h3
+              id="stok-siparis-modal-baslik"
+              style="margin-top: 0"
+              data-tr="Yeni Ürün"
+              data-en="New Product"
+            >
+              Yeni Ürün
+            </h3>
             <input type="hidden" id="ss-product-id" />
             <style>
-              .ss-field { display:flex; flex-direction:column; gap:4px; }
-              .ss-field label { font-size:0.8rem; color:var(--text-muted); font-weight:600; text-align:left; }
+              .ss-field {
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+              }
+              .ss-field label {
+                font-size: 0.8rem;
+                color: var(--text-muted);
+                font-weight: 600;
+                text-align: left;
+              }
             </style>
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-              <div class="ss-field"><label for="ss-sku" data-tr="Kod (SKU)" data-en="Code (SKU)">Kod (SKU)</label>
-                <input class="login-input" id="ss-sku" list="dl-sku" onchange="_ssSkuAutofill()" />
-                <datalist id="dl-sku"></datalist></div>
-              <div class="ss-field"><label for="ss-warehouse" data-tr="Fiziki Raf (Lokasyon)" data-en="Physical Shelf (Location)">Fiziki Raf (Lokasyon)</label>
-                <input class="login-input" id="ss-warehouse" list="dl-warehouse" />
-                <datalist id="dl-warehouse"></datalist></div>
-              <div class="ss-field"><label for="ss-name-tr" data-tr="Ürün Adı" data-en="Product Name">Ürün Adı</label>
+            <div
+              style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px"
+            >
+              <div class="ss-field">
+                <label for="ss-sku" data-tr="Kod (SKU)" data-en="Code (SKU)"
+                  >Kod (SKU)</label
+                >
+                <input
+                  class="login-input"
+                  id="ss-sku"
+                  list="dl-sku"
+                  onchange="_ssSkuAutofill()"
+                />
+                <datalist id="dl-sku"></datalist>
+              </div>
+              <div class="ss-field">
+                <label
+                  for="ss-warehouse"
+                  data-tr="Fiziki Raf (Lokasyon)"
+                  data-en="Physical Shelf (Location)"
+                  >Fiziki Raf (Lokasyon)</label
+                >
+                <input
+                  class="login-input"
+                  id="ss-warehouse"
+                  list="dl-warehouse"
+                />
+                <datalist id="dl-warehouse"></datalist>
+              </div>
+              <div class="ss-field">
+                <label
+                  for="ss-name-tr"
+                  data-tr="Ürün Adı"
+                  data-en="Product Name"
+                  >Ürün Adı</label
+                >
                 <input class="login-input" id="ss-name-tr" list="dl-name-tr" />
-                <datalist id="dl-name-tr"></datalist></div>
-              <div class="ss-field"><label for="ss-name-en" data-tr="Ürün Adı (Alternatif Dil)" data-en="Product Name (Alt. Language)">Ürün Adı (Alternatif Dil)</label>
+                <datalist id="dl-name-tr"></datalist>
+              </div>
+              <div class="ss-field">
+                <label
+                  for="ss-name-en"
+                  data-tr="Ürün Adı (Alternatif Dil)"
+                  data-en="Product Name (Alt. Language)"
+                  >Ürün Adı (Alternatif Dil)</label
+                >
                 <input class="login-input" id="ss-name-en" list="dl-name-en" />
-                <datalist id="dl-name-en"></datalist></div>
-              <div class="ss-field"><label for="ss-category-id" data-tr="Mal Grubu" data-en="Category">Mal Grubu</label>
-                <select class="login-input" id="ss-category-id"></select></div>
-              <div class="ss-field"><label for="ss-supplier-id" data-tr="Tedarikçi Şirket" data-en="Supplier">Tedarikçi Şirket</label>
-                <select class="login-input" id="ss-supplier-id"></select></div>
-              <div class="ss-field"><label for="ss-unit-cost" data-tr="Birim Maliyet" data-en="Unit Cost">Birim Maliyet</label>
-                <input class="login-input" id="ss-unit-cost" type="number" step="0.01" /></div>
-              <div class="ss-field"><label for="ss-unit-price" data-tr="Değer (Birim Fiyat)" data-en="Value (Unit Price)">Değer (Birim Fiyat)</label>
-                <input class="login-input" id="ss-unit-price" type="number" step="0.01" /></div>
-              <div class="ss-field"><label for="ss-current-stock" data-tr="Bakiye (Stok)" data-en="Balance (Stock)">Bakiye (Stok)</label>
-                <input class="login-input" id="ss-current-stock" type="number" /></div>
-              <div class="ss-field"><label for="ss-reorder-point" data-tr="Yeniden Sipariş Noktası" data-en="Reorder Point">Yeniden Sipariş Noktası</label>
-                <input class="login-input" id="ss-reorder-point" type="number" /></div>
-              <div class="ss-field"><label for="ss-expiration" data-tr="LIFO Hedef (SKT)" data-en="LIFO Target (Expiration)">LIFO Hedef (SKT)</label>
-                <input class="login-input" id="ss-expiration" type="date" /></div>
-              <div class="ss-field"><label for="ss-abc" data-tr="ABC Sınıfı" data-en="ABC Class">ABC Sınıfı</label>
-                <input class="login-input" id="ss-abc" value="C" /></div>
+                <datalist id="dl-name-en"></datalist>
+              </div>
+              <div class="ss-field">
+                <label
+                  for="ss-category-id"
+                  data-tr="Mal Grubu"
+                  data-en="Category"
+                  >Mal Grubu</label
+                >
+                <select class="login-input" id="ss-category-id"></select>
+              </div>
+              <div class="ss-field">
+                <label
+                  for="ss-supplier-id"
+                  data-tr="Tedarikçi Şirket"
+                  data-en="Supplier"
+                  >Tedarikçi Şirket</label
+                >
+                <select class="login-input" id="ss-supplier-id"></select>
+              </div>
+              <div class="ss-field">
+                <label
+                  for="ss-unit-cost"
+                  data-tr="Birim Maliyet"
+                  data-en="Unit Cost"
+                  >Birim Maliyet</label
+                >
+                <input
+                  class="login-input"
+                  id="ss-unit-cost"
+                  type="number"
+                  step="0.01"
+                />
+              </div>
+              <div class="ss-field">
+                <label
+                  for="ss-unit-price"
+                  data-tr="Değer (Birim Fiyat)"
+                  data-en="Value (Unit Price)"
+                  >Değer (Birim Fiyat)</label
+                >
+                <input
+                  class="login-input"
+                  id="ss-unit-price"
+                  type="number"
+                  step="0.01"
+                />
+              </div>
+              <div class="ss-field">
+                <label
+                  for="ss-current-stock"
+                  data-tr="Bakiye (Stok)"
+                  data-en="Balance (Stock)"
+                  >Bakiye (Stok)</label
+                >
+                <input
+                  class="login-input"
+                  id="ss-current-stock"
+                  type="number"
+                />
+              </div>
+              <div class="ss-field">
+                <label
+                  for="ss-reorder-point"
+                  data-tr="Yeniden Sipariş Noktası"
+                  data-en="Reorder Point"
+                  >Yeniden Sipariş Noktası</label
+                >
+                <input
+                  class="login-input"
+                  id="ss-reorder-point"
+                  type="number"
+                />
+              </div>
+              <div class="ss-field">
+                <label
+                  for="ss-expiration"
+                  data-tr="LIFO Hedef (SKT)"
+                  data-en="LIFO Target (Expiration)"
+                  >LIFO Hedef (SKT)</label
+                >
+                <input class="login-input" id="ss-expiration" type="date" />
+              </div>
+              <div class="ss-field">
+                <label for="ss-abc" data-tr="ABC Sınıfı" data-en="ABC Class"
+                  >ABC Sınıfı</label
+                >
+                <input class="login-input" id="ss-abc" value="C" />
+              </div>
             </div>
-            <div style="display:flex; gap:10px; margin-top:15px; justify-content:flex-end;">
-              <button class="btn" onclick="stokSiparisFormKapat()" style="background:transparent; border:1px solid var(--border);" data-tr="İptal" data-en="Cancel">İptal</button>
-              <button class="btn btn-shimmer" onclick="stokSiparisKaydet()" data-tr="Kaydet" data-en="Save">Kaydet</button>
+            <div
+              style="
+                display: flex;
+                gap: 10px;
+                margin-top: 15px;
+                justify-content: flex-end;
+              "
+            >
+              <button
+                class="btn"
+                onclick="stokSiparisFormKapat()"
+                style="background: transparent; border: 1px solid var(--border)"
+                data-tr="İptal"
+                data-en="Cancel"
+              >
+                İptal
+              </button>
+              <button
+                class="btn btn-shimmer"
+                onclick="stokSiparisKaydet()"
+                data-tr="Kaydet"
+                data-en="Save"
+              >
+                Kaydet
+              </button>
             </div>
           </div>
         </div>
@@ -1211,22 +1415,29 @@
       <!-- 6. ÜRÜN YAŞAM DÖNGÜSÜ -->
       <div id="tab-yasam-dongusu" class="tab-content">
         <div class="table-container">
-          <h3 style="margin-top:0; color: var(--accent-purple)"
-              data-tr="🔄 Ürün Yaşam Döngüsü (Giriş / Çıkış / Kalış Süresi)"
-              data-en="🔄 Product Lifecycle (Entry / Exit / Duration)">
+          <h3
+            style="margin-top: 0; color: var(--accent-purple)"
+            data-tr="🔄 Ürün Yaşam Döngüsü (Giriş / Çıkış / Kalış Süresi)"
+            data-en="🔄 Product Lifecycle (Entry / Exit / Duration)"
+          >
             🔄 Ürün Yaşam Döngüsü
           </h3>
-          <p style="color:var(--text-muted); margin-top:0;"
-             data-tr="Her ürünün envantere ilk giriş tarihi, son çıkış tarihi ve depoda ne kadar kaldığı."
-             data-en="First entry date, last exit date and how long each product stayed in inventory.">
-            Her ürünün envantere ilk giriş tarihi, son çıkış tarihi ve depoda ne kadar kaldığı.
+          <p
+            style="color: var(--text-muted); margin-top: 0"
+            data-tr="Her ürünün envantere ilk giriş tarihi, son çıkış tarihi ve depoda ne kadar kaldığı."
+            data-en="First entry date, last exit date and how long each product stayed in inventory."
+          >
+            Her ürünün envantere ilk giriş tarihi, son çıkış tarihi ve depoda ne
+            kadar kaldığı.
           </p>
           <table>
             <thead>
               <tr>
                 <th data-tr="Kod (SKU)" data-en="Code (SKU)">Kod (SKU)</th>
                 <th data-tr="Ürün Adı" data-en="Product Name">Ürün Adı</th>
-                <th data-tr="Mevcut Stok" data-en="Current Stock">Mevcut Stok</th>
+                <th data-tr="Mevcut Stok" data-en="Current Stock">
+                  Mevcut Stok
+                </th>
                 <th data-tr="İlk Giriş" data-en="First Entry">İlk Giriş</th>
                 <th data-tr="Son Çıkış" data-en="Last Exit">Son Çıkış</th>
                 <th data-tr="Kalış Süresi" data-en="Duration">Kalış Süresi</th>
@@ -1235,7 +1446,16 @@
               </tr>
             </thead>
             <tbody id="yasam-dongusu-table">
-              <tr><td colspan="8" style="text-align:center" data-tr="Yükleniyor..." data-en="Loading...">Yükleniyor...</td></tr>
+              <tr>
+                <td
+                  colspan="8"
+                  style="text-align: center"
+                  data-tr="Yükleniyor..."
+                  data-en="Loading..."
+                >
+                  Yükleniyor...
+                </td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -1301,6 +1521,7 @@
         </div>
       </div>
     </div>
+    </div><!-- /appContainer -->
 
     <!-- JWT, API ve MagicUI İşleyiş Js -->
     <script>
@@ -1387,25 +1608,47 @@
         window.requestAnimationFrame(step);
       }
 
+      // --- AUTH GATE ---
+      function requireAuth() {
+        const token = localStorage.getItem("token");
+        const user = localStorage.getItem("username");
+        if (!token || !user) {
+          // No valid session — lock to login screen
+          document.getElementById("appContainer").style.display = "none";
+          document.getElementById("loginOverlay").style.display = "flex";
+          document.getElementById("loginOverlay").style.opacity = "1";
+          if (ws) { ws.close(); ws = null; }
+          return false;
+        }
+        return true;
+      }
+
+      function bootstrapApp() {
+        const user = localStorage.getItem("username");
+        const role = localStorage.getItem("role");
+        // Show app, hide login
+        document.getElementById("loginOverlay").style.opacity = "0";
+        setTimeout(() => { document.getElementById("loginOverlay").style.display = "none"; }, 400);
+        document.getElementById("appContainer").style.display = "flex";
+        // Activate dashboard tab
+        const dashTab = document.getElementById("tab-dashboard");
+        if (dashTab && !document.querySelector(".tab-content.active")) {
+          dashTab.classList.add("active");
+          document.getElementById("nav-dashboard").classList.add("active");
+        }
+        document.getElementById("aktifKullanici").innerHTML =
+          `${user.toUpperCase()}<br/><span style='color:var(--accent-blue)'>(${role})</span>`;
+        applyRoleVisibility(role);
+        verileriCek();
+        kurumsalSoketBaglantisiKur();
+      }
+
       // Meteorları HTML yüklenir yüklenmez doğur!
       document.addEventListener("DOMContentLoaded", () => {
         generateMeteors();
 
-        // Auto Login - Restore session if token exists
-        const token = localStorage.getItem("token");
-        const user = localStorage.getItem("username");
-        const role = localStorage.getItem("role");
-
-        if (token && user) {
-          document.getElementById("loginOverlay").style.display = "none";
-          document.getElementById("aktifKullanici").innerHTML =
-            `${user.toUpperCase()}<br/><span style='color:var(--accent-blue)'>(${role})</span>`;
-
-          // Role based UI management
-          applyRoleVisibility(role);
-
-          verileriCek();
-          kurumsalSoketBaglantisiKur();
+        if (requireAuth()) {
+          bootstrapApp();
         }
 
         // Register PWA Service Worker
@@ -1417,7 +1660,7 @@
       });
 
       const API_URL = window.location.origin;
-      let lineChartInstance = null;
+      let barChartInstance = null;
       let pieChartInstance = null;
       let ws = null; // WebSocket Değişkeni
       let html5QrcodeScanner = null; // Kamera Tarayıcı Değişkeni
@@ -1448,7 +1691,10 @@
               ? el.getAttribute("data-tr")
               : el.getAttribute("data-en");
         });
-        if (typeof loadStokSiparis === "function" && document.getElementById("stok-siparis-table")) {
+        if (
+          typeof loadStokSiparis === "function" &&
+          document.getElementById("stok-siparis-table")
+        ) {
           loadStokSiparis();
         }
 
@@ -1480,23 +1726,7 @@
             localStorage.setItem("token", data.access_token);
             localStorage.setItem("role", data.role);
             localStorage.setItem("username", user);
-
-            document.getElementById("loginOverlay").style.opacity = "0";
-            setTimeout(
-              () =>
-                (document.getElementById("loginOverlay").style.display =
-                  "none"),
-              500,
-            );
-
-            document.getElementById("aktifKullanici").innerHTML =
-              `${user.toUpperCase()}<br/><span style='color:var(--accent-blue)'>(${data.role})</span>`;
-
-            applyRoleVisibility(data.role);
-
-            // Giriş Başarılıysa Verileri Çek ve WebSocketi Kur
-            verileriCek();
-            kurumsalSoketBaglantisiKur();
+            bootstrapApp();
           } else {
             const err = document.getElementById("loginError");
             err.innerText = data.detail || "Giriş Başarısız!";
@@ -1511,7 +1741,7 @@
         localStorage.removeItem("token");
         localStorage.removeItem("role");
         localStorage.removeItem("username");
-        window.location.reload(); // En doğal çıkış yöntemi
+        location.reload();
       }
 
       function getHeaders() {
@@ -1558,8 +1788,12 @@
           _stokSiparisCache = data.data;
           tbl.innerHTML = "";
           data.data.forEach((u) => {
-            const ad = currentLang === "TR" ? u.name_tr : (u.name_en || u.name_tr);
-            const kat = currentLang === "TR" ? u.category_name_tr : (u.category_name_en || u.category_name_tr);
+            const ad =
+              currentLang === "TR" ? u.name_tr : u.name_en || u.name_tr;
+            const kat =
+              currentLang === "TR"
+                ? u.category_name_tr
+                : u.category_name_en || u.category_name_tr;
             tbl.innerHTML += `<tr>
               <td><code>${u.sku || "-"}</code></td>
               <td><b>${ad}</b></td>
@@ -1567,16 +1801,16 @@
               <td>${u.supplier_name || "-"}</td>
               <td>${u.warehouse_location || "-"}</td>
               <td>${u.expiration_date || "-"}</td>
-              <td style="${u.current_stock < 15 ? 'color:var(--accent-red);font-weight:bold' : 'color:var(--accent-green);font-weight:bold'}">${u.current_stock}</td>
+              <td style="${u.current_stock < 15 ? "color:var(--accent-red);font-weight:bold" : "color:var(--accent-green);font-weight:bold"}">${u.current_stock}</td>
               <td>₺${(u.unit_price || 0).toFixed(2)}</td>
               <td>
-                <button class="btn" onclick="stokSiparisFormAc(${u.product_id})" style="padding:4px 10px; font-size:0.8rem;">${t("Düzenle","Edit")}</button>
-                <button class="btn btn-red" onclick="stokSiparisSil(${u.product_id}, '${(ad || '').replace(/'/g,"\\'")}')" style="padding:4px 10px; font-size:0.8rem;">${t("Sil","Delete")}</button>
+                <button class="btn" onclick="stokSiparisFormAc(${u.product_id})" style="padding:4px 10px; font-size:0.8rem;">${t("Düzenle", "Edit")}</button>
+                <button class="btn btn-red" onclick="stokSiparisSil(${u.product_id}, '${(ad || "").replace(/'/g, "\\'")}')" style="padding:4px 10px; font-size:0.8rem;">${t("Sil", "Delete")}</button>
               </td>
             </tr>`;
           });
         } else {
-          tbl.innerHTML = `<tr><td colspan="9" style="text-align:center;color:#94a3b8">${t("Kayıt yok.","No records.")}</td></tr>`;
+          tbl.innerHTML = `<tr><td colspan="9" style="text-align:center;color:#94a3b8">${t("Kayıt yok.", "No records.")}</td></tr>`;
         }
 
         const logTbl = document.getElementById("stok-log-table");
@@ -1585,7 +1819,10 @@
           if (logData && logData.log && logData.log.length > 0) {
             logTbl.innerHTML = "";
             logData.log.forEach((l) => {
-              const tip = l.transaction_type === "IN" ? `<span class="badge badge-IN">IN</span>` : `<span class="badge badge-OUT">OUT</span>`;
+              const tip =
+                l.transaction_type === "IN"
+                  ? `<span class="badge badge-IN">IN</span>`
+                  : `<span class="badge badge-OUT">OUT</span>`;
               logTbl.innerHTML += `<tr>
                 <td>${l.transaction_date ? new Date(l.transaction_date).toLocaleString() : "-"}</td>
                 <td><code>${l.sku}</code></td>
@@ -1598,7 +1835,7 @@
               </tr>`;
             });
           } else {
-            logTbl.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#94a3b8">${t("Hareket yok.","No movements.")}</td></tr>`;
+            logTbl.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#94a3b8">${t("Hareket yok.", "No movements.")}</td></tr>`;
           }
         }
       }
@@ -1610,32 +1847,48 @@
         // Only autofill when editing (pid already set). In create mode, never
         // set ss-product-id — that would turn a create into an update.
         if (!pid) return;
-        const u = _stokSiparisCache.find((x) => (x.sku || "").toLowerCase() === sku.toLowerCase());
+        const u = _stokSiparisCache.find(
+          (x) => (x.sku || "").toLowerCase() === sku.toLowerCase(),
+        );
         if (!u) return;
-        document.getElementById("ss-warehouse").value = u.warehouse_location || "";
+        document.getElementById("ss-warehouse").value =
+          u.warehouse_location || "";
         document.getElementById("ss-name-tr").value = u.name_tr || "";
         document.getElementById("ss-name-en").value = u.name_en || "";
         document.getElementById("ss-category-id").value = u.category_id || "";
         document.getElementById("ss-supplier-id").value = u.supplier_id || "";
         document.getElementById("ss-unit-cost").value = u.unit_cost || "";
         document.getElementById("ss-unit-price").value = u.unit_price || "";
-        document.getElementById("ss-current-stock").value = u.current_stock || 0;
-        document.getElementById("ss-reorder-point").value = u.reorder_point || 10;
-        document.getElementById("ss-expiration").value = u.expiration_date || "";
+        document.getElementById("ss-current-stock").value =
+          u.current_stock || 0;
+        document.getElementById("ss-reorder-point").value =
+          u.reorder_point || 10;
+        document.getElementById("ss-expiration").value =
+          u.expiration_date || "";
         document.getElementById("ss-abc").value = u.abc_class || "C";
       }
 
       async function _ssSave(endpoint, method, body) {
         try {
           const opt = { method, headers: getHeaders() };
-          if (body && method !== "GET" && method !== "DELETE") opt.body = JSON.stringify(body);
+          if (body && method !== "GET" && method !== "DELETE")
+            opt.body = JSON.stringify(body);
           const res = await fetch(API_URL + endpoint, opt);
           const data = await res.json().catch(() => ({}));
           if (!res.ok) {
-            const msg = (data && (data.detail || data.mesaj)) || `HTTP ${res.status}`;
-            return { ok: false, status: res.status, msg: typeof msg === "string" ? msg : JSON.stringify(msg) };
+            const msg =
+              (data && (data.detail || data.mesaj)) || `HTTP ${res.status}`;
+            return {
+              ok: false,
+              status: res.status,
+              msg: typeof msg === "string" ? msg : JSON.stringify(msg),
+            };
           }
-          return { ok: true, status: res.status, msg: data.mesaj || t("Başarılı","Success") };
+          return {
+            ok: true,
+            status: res.status,
+            msg: data.mesaj || t("Başarılı", "Success"),
+          };
         } catch (e) {
           return { ok: false, status: 0, msg: e.message || "Network error" };
         }
@@ -1646,22 +1899,48 @@
         const setDatalist = (id, values) => {
           const dl = document.getElementById(id);
           if (!dl) return;
-          dl.innerHTML = uniq(values).map((v) => `<option value="${String(v).replace(/"/g,'&quot;')}">`).join("");
+          dl.innerHTML = uniq(values)
+            .map((v) => `<option value="${String(v).replace(/"/g, "&quot;")}">`)
+            .join("");
         };
-        setDatalist("dl-sku", _stokSiparisCache.map((u) => u.sku));
-        setDatalist("dl-warehouse", _stokSiparisCache.map((u) => u.warehouse_location));
-        setDatalist("dl-name-tr", _stokSiparisCache.map((u) => u.name_tr));
-        setDatalist("dl-name-en", _stokSiparisCache.map((u) => u.name_en));
+        setDatalist(
+          "dl-sku",
+          _stokSiparisCache.map((u) => u.sku),
+        );
+        setDatalist(
+          "dl-warehouse",
+          _stokSiparisCache.map((u) => u.warehouse_location),
+        );
+        setDatalist(
+          "dl-name-tr",
+          _stokSiparisCache.map((u) => u.name_tr),
+        );
+        setDatalist(
+          "dl-name-en",
+          _stokSiparisCache.map((u) => u.name_en),
+        );
 
         const catSel = document.getElementById("ss-category-id");
         const supSel = document.getElementById("ss-supplier-id");
-        const cats = {}, sups = {};
+        const cats = {},
+          sups = {};
         _stokSiparisCache.forEach((u) => {
-          if (u.category_id && !cats[u.category_id]) cats[u.category_id] = u.category_name_tr || u.category_name_en || ("#" + u.category_id);
-          if (u.supplier_id && !sups[u.supplier_id]) sups[u.supplier_id] = u.supplier_name || ("#" + u.supplier_id);
+          if (u.category_id && !cats[u.category_id])
+            cats[u.category_id] =
+              u.category_name_tr || u.category_name_en || "#" + u.category_id;
+          if (u.supplier_id && !sups[u.supplier_id])
+            sups[u.supplier_id] = u.supplier_name || "#" + u.supplier_id;
         });
-        catSel.innerHTML = `<option value="">${t("Seçiniz","Select")}</option>` + Object.entries(cats).map(([id, n]) => `<option value="${id}">${n}</option>`).join("");
-        supSel.innerHTML = `<option value="">${t("Seçiniz","Select")}</option>` + Object.entries(sups).map(([id, n]) => `<option value="${id}">${n}</option>`).join("");
+        catSel.innerHTML =
+          `<option value="">${t("Seçiniz", "Select")}</option>` +
+          Object.entries(cats)
+            .map(([id, n]) => `<option value="${id}">${n}</option>`)
+            .join("");
+        supSel.innerHTML =
+          `<option value="">${t("Seçiniz", "Select")}</option>` +
+          Object.entries(sups)
+            .map(([id, n]) => `<option value="${id}">${n}</option>`)
+            .join("");
       }
 
       function stokSiparisFormAc(productId) {
@@ -1669,27 +1948,48 @@
         const modal = document.getElementById("stok-siparis-modal");
         const baslik = document.getElementById("stok-siparis-modal-baslik");
         document.getElementById("ss-product-id").value = productId || "";
-        const fields = ["ss-sku","ss-warehouse","ss-name-tr","ss-name-en","ss-category-id","ss-supplier-id","ss-unit-cost","ss-unit-price","ss-current-stock","ss-reorder-point","ss-expiration"];
-        fields.forEach((id) => { const el = document.getElementById(id); if (el) el.value = ""; });
+        const fields = [
+          "ss-sku",
+          "ss-warehouse",
+          "ss-name-tr",
+          "ss-name-en",
+          "ss-category-id",
+          "ss-supplier-id",
+          "ss-unit-cost",
+          "ss-unit-price",
+          "ss-current-stock",
+          "ss-reorder-point",
+          "ss-expiration",
+        ];
+        fields.forEach((id) => {
+          const el = document.getElementById(id);
+          if (el) el.value = "";
+        });
         document.getElementById("ss-abc").value = "C";
         if (productId) {
           const u = _stokSiparisCache.find((x) => x.product_id === productId);
           if (u) {
-            baslik.innerText = t("Ürünü Düzenle","Edit Product");
+            baslik.innerText = t("Ürünü Düzenle", "Edit Product");
             document.getElementById("ss-sku").value = u.sku || "";
-            document.getElementById("ss-warehouse").value = u.warehouse_location || "";
+            document.getElementById("ss-warehouse").value =
+              u.warehouse_location || "";
             document.getElementById("ss-name-tr").value = u.name_tr || "";
             document.getElementById("ss-name-en").value = u.name_en || "";
-            document.getElementById("ss-category-id").value = u.category_id || "";
-            document.getElementById("ss-supplier-id").value = u.supplier_id || "";
+            document.getElementById("ss-category-id").value =
+              u.category_id || "";
+            document.getElementById("ss-supplier-id").value =
+              u.supplier_id || "";
             document.getElementById("ss-unit-cost").value = u.unit_cost || "";
             document.getElementById("ss-unit-price").value = u.unit_price || "";
-            document.getElementById("ss-current-stock").value = u.current_stock || 0;
-            document.getElementById("ss-reorder-point").value = u.reorder_point || 10;
-            document.getElementById("ss-expiration").value = u.expiration_date || "";
+            document.getElementById("ss-current-stock").value =
+              u.current_stock || 0;
+            document.getElementById("ss-reorder-point").value =
+              u.reorder_point || 10;
+            document.getElementById("ss-expiration").value =
+              u.expiration_date || "";
           }
         } else {
-          baslik.innerText = t("Yeni Ürün","New Product");
+          baslik.innerText = t("Yeni Ürün", "New Product");
         }
         modal.style.display = "flex";
       }
@@ -1702,20 +2002,34 @@
         const pid = document.getElementById("ss-product-id").value;
         const sku = document.getElementById("ss-sku").value.trim();
         const nameTr = document.getElementById("ss-name-tr").value.trim();
-        const unitCost = parseFloat(document.getElementById("ss-unit-cost").value);
-        const unitPrice = parseFloat(document.getElementById("ss-unit-price").value);
-        const currentStock = parseInt(document.getElementById("ss-current-stock").value);
+        const unitCost = parseFloat(
+          document.getElementById("ss-unit-cost").value,
+        );
+        const unitPrice = parseFloat(
+          document.getElementById("ss-unit-price").value,
+        );
+        const currentStock = parseInt(
+          document.getElementById("ss-current-stock").value,
+        );
 
         // Client-side validation for create path
         if (!pid) {
           const missing = [];
-          if (!sku) missing.push(t("Kod (SKU)","Code (SKU)"));
-          if (!nameTr) missing.push(t("Ürün Adı","Product Name"));
-          if (isNaN(unitCost) || unitCost < 0) missing.push(t("Birim Maliyet (≥0)","Unit Cost (≥0)"));
-          if (isNaN(unitPrice) || unitPrice < 0) missing.push(t("Birim Fiyat (≥0)","Unit Price (≥0)"));
-          if (isNaN(currentStock) || currentStock < 0) missing.push(t("Stok Miktarı (≥0)","Stock Qty (≥0)"));
+          if (!sku) missing.push(t("Kod (SKU)", "Code (SKU)"));
+          if (!nameTr) missing.push(t("Ürün Adı", "Product Name"));
+          if (isNaN(unitCost) || unitCost < 0)
+            missing.push(t("Birim Maliyet (≥0)", "Unit Cost (≥0)"));
+          if (isNaN(unitPrice) || unitPrice < 0)
+            missing.push(t("Birim Fiyat (≥0)", "Unit Price (≥0)"));
+          if (isNaN(currentStock) || currentStock < 0)
+            missing.push(t("Stok Miktarı (≥0)", "Stock Qty (≥0)"));
           if (missing.length > 0) {
-            alert(t("Zorunlu alanlar eksik veya geçersiz:\n","Required fields missing or invalid:\n") + missing.join("\n"));
+            alert(
+              t(
+                "Zorunlu alanlar eksik veya geçersiz:\n",
+                "Required fields missing or invalid:\n",
+              ) + missing.join("\n"),
+            );
             return;
           }
         }
@@ -1724,15 +2038,20 @@
           sku: sku,
           name_tr: nameTr,
           name_en: document.getElementById("ss-name-en").value.trim(),
-          category_id: parseInt(document.getElementById("ss-category-id").value) || null,
-          supplier_id: parseInt(document.getElementById("ss-supplier-id").value) || null,
+          category_id:
+            parseInt(document.getElementById("ss-category-id").value) || null,
+          supplier_id:
+            parseInt(document.getElementById("ss-supplier-id").value) || null,
           unit_cost: isNaN(unitCost) ? 0 : unitCost,
           unit_price: isNaN(unitPrice) ? 0 : unitPrice,
           current_stock: isNaN(currentStock) ? 0 : currentStock,
-          reorder_point: parseInt(document.getElementById("ss-reorder-point").value) || 10,
+          reorder_point:
+            parseInt(document.getElementById("ss-reorder-point").value) || 10,
           abc_class: document.getElementById("ss-abc").value.trim() || "C",
-          expiration_date: document.getElementById("ss-expiration").value || null,
-          warehouse_location: document.getElementById("ss-warehouse").value.trim() || "Ana Depo",
+          expiration_date:
+            document.getElementById("ss-expiration").value || null,
+          warehouse_location:
+            document.getElementById("ss-warehouse").value.trim() || "Ana Depo",
         };
         const result = pid
           ? await _ssSave(`/urun/${pid}`, "PUT", payload)
@@ -1743,20 +2062,33 @@
           loadStokSiparis(); // reloads both product table and stock log
         } else if (result.status === 409) {
           // SKU conflict — keep modal open so user can fix the SKU
-          alert(t("Bu SKU zaten mevcut. Lütfen farklı bir SKU girin.","This SKU already exists. Please enter a different SKU."));
+          alert(
+            t(
+              "Bu SKU zaten mevcut. Lütfen farklı bir SKU girin.",
+              "This SKU already exists. Please enter a different SKU.",
+            ),
+          );
         } else {
-          alert(t("İşlem başarısız: ","Operation failed: ") + result.msg);
+          alert(t("İşlem başarısız: ", "Operation failed: ") + result.msg);
         }
       }
 
       async function stokSiparisSil(productId, ad) {
-        if (!confirm(t(`"${ad}" ürününü silmek istediğinize emin misiniz?`, `Delete "${ad}"?`))) return;
+        if (
+          !confirm(
+            t(
+              `"${ad}" ürününü silmek istediğinize emin misiniz?`,
+              `Delete "${ad}"?`,
+            ),
+          )
+        )
+          return;
         const result = await _ssSave(`/urun/${productId}`, "DELETE", {});
         if (result.ok) {
           alert(result.msg);
           loadStokSiparis();
         } else {
-          alert(t("Silme başarısız: ","Delete failed: ") + result.msg);
+          alert(t("Silme başarısız: ", "Delete failed: ") + result.msg);
         }
       }
 
@@ -1767,14 +2099,24 @@
         if (data && data.data && data.data.length > 0) {
           tbl.innerHTML = "";
           data.data.forEach((u) => {
-            const ad = currentLang === "TR" ? u.name_tr : (u.name_en || u.name_tr);
-            const giris = u.ilk_giris ? new Date(u.ilk_giris).toLocaleString() : "-";
-            const cikis = u.son_cikis ? new Date(u.son_cikis).toLocaleString() : "-";
+            const ad =
+              currentLang === "TR" ? u.name_tr : u.name_en || u.name_tr;
+            const giris = u.ilk_giris
+              ? new Date(u.ilk_giris).toLocaleString()
+              : "-";
+            const cikis = u.son_cikis
+              ? new Date(u.son_cikis).toLocaleString()
+              : "-";
             const sure = u.kalis_suresi || "-";
             const durum = u.hala_depoda
-              ? `<span style="color:var(--accent-green);font-weight:bold">${t("Depoda","In Stock")}</span>`
-              : (u.ilk_giris ? `<span style="color:var(--accent-red);font-weight:bold">${t("Çıkış Yapıldı","Exited")}</span>` : `<span style="color:var(--text-muted)">${t("Hareket Yok","No Movement")}</span>`);
-            const stokRenk = u.current_stock < 15 ? "color:var(--accent-red);font-weight:bold" : "color:var(--accent-green);font-weight:bold";
+              ? `<span style="color:var(--accent-green);font-weight:bold">${t("Depoda", "In Stock")}</span>`
+              : u.ilk_giris
+                ? `<span style="color:var(--accent-red);font-weight:bold">${t("Çıkış Yapıldı", "Exited")}</span>`
+                : `<span style="color:var(--text-muted)">${t("Hareket Yok", "No Movement")}</span>`;
+            const stokRenk =
+              u.current_stock < 15
+                ? "color:var(--accent-red);font-weight:bold"
+                : "color:var(--accent-green);font-weight:bold";
             tbl.innerHTML += `<tr>
               <td><code>${u.sku || "-"}</code></td>
               <td><b>${ad}</b></td>
@@ -1787,7 +2129,7 @@
             </tr>`;
           });
         } else {
-          tbl.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#94a3b8">${t("Kayıt yok.","No records.")}</td></tr>`;
+          tbl.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#94a3b8">${t("Kayıt yok.", "No records.")}</td></tr>`;
         }
       }
 
@@ -1800,7 +2142,10 @@
       }
 
       async function reddetKullanici(userId) {
-        if (!confirm(t("Kullanıcıyı reddet ve sil?", "Reject and delete user?"))) return;
+        if (
+          !confirm(t("Kullanıcıyı reddet ve sil?", "Reject and delete user?"))
+        )
+          return;
         const r = await apiIstek(`/reject-user/${userId}`, "DELETE");
         if (r) {
           alert(t("Kullanıcı reddedildi.", "User rejected."));
@@ -1853,10 +2198,16 @@
           .replace(/[^\w\sğüşöçıİĞÜŞÖÇ]/gi, "")
           .trim();
         verileriCek();
-        if (tabID === "tab-stok-siparis" && typeof loadStokSiparis === "function") {
+        if (
+          tabID === "tab-stok-siparis" &&
+          typeof loadStokSiparis === "function"
+        ) {
           loadStokSiparis();
         }
-        if (tabID === "tab-yasam-dongusu" && typeof loadYasamDongusu === "function") {
+        if (
+          tabID === "tab-yasam-dongusu" &&
+          typeof loadYasamDongusu === "function"
+        ) {
           loadYasamDongusu();
         }
       }
@@ -1867,7 +2218,15 @@
           if (bodyObj) opt.body = JSON.stringify(bodyObj);
 
           const res = await fetch(API_URL + endpoint, opt);
-          if (res.status === 401 || res.status === 403)
+          if (res.status === 401) {
+            // Token expired or invalid — reset to login
+            localStorage.removeItem("token");
+            localStorage.removeItem("role");
+            localStorage.removeItem("username");
+            requireAuth();
+            return null;
+          }
+          if (res.status === 403)
             throw new Error("Erişim Kısıtlı");
           return await res.json();
         } catch (e) {
@@ -1881,19 +2240,25 @@
 
         const gizliTxt = t("Erişim Kısıtlı", "Access Denied");
 
-        // Dashboard Özeti
-        const ozet = await apiIstek("/dashboard-ozet");
-        if (ozet) {
-          animateValue(
-            "kritik-stok",
-            0,
-            parseInt(ozet.kritik_stok_uyari_sayisi || 0),
-            1000,
-            t(" Risk", " Risk"),
-          );
+        // Dashboard Inventory Summary (KPI + Charts)
+        const invSummary = await apiIstek("/dashboard/inventory-summary");
+        if (invSummary) {
+          animateValue("kpi-total-skus", 0, parseInt(invSummary.total_skus || 0), 1000, "");
+          animateValue("kpi-stock-value", 0, parseFloat(invSummary.total_stock_value || 0), 1500, " ₺");
+          animateValue("kpi-low-stock", 0, parseInt(invSummary.low_stock_count || 0) + parseInt(invSummary.out_of_stock_count || 0), 1000, t(" Ürün", " Items"));
+          animateValue("kpi-near-expiry", 0, parseInt(invSummary.near_expiry_count || 0), 1000, t(" Ürün", " Items"));
+
+          if (document.getElementById("barChart")) {
+            stokHareketiGrafikCiz(invSummary.stock_movement_7d || []);
+          }
+          if (document.getElementById("pieChart")) {
+            kategoriPastaGrafikCiz(invSummary.category_breakdown || []);
+          }
         } else {
-          const k = document.getElementById("kritik-stok");
-          if (k) k.innerText = gizliTxt;
+          ["kpi-total-skus", "kpi-stock-value", "kpi-low-stock", "kpi-near-expiry"].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.innerText = gizliTxt;
+          });
         }
 
         // Pending Users (Admin only)
@@ -1903,10 +2268,10 @@
           if (pu && pu.users && pu.users.length > 0) {
             tb.innerHTML = "";
             pu.users.forEach((u) => {
-              tb.innerHTML += `<tr><td>${u.id}</td><td><b>${u.username}</b></td><td>${u.role}</td><td><button class="btn" onclick="onaylaKullanici(${u.id})">${t("Onayla","Approve")}</button> <button class="btn btn-red" onclick="reddetKullanici(${u.id})">${t("Reddet","Reject")}</button></td></tr>`;
+              tb.innerHTML += `<tr><td>${u.id}</td><td><b>${u.username}</b></td><td>${u.role}</td><td><button class="btn" onclick="onaylaKullanici(${u.id})">${t("Onayla", "Approve")}</button> <button class="btn btn-red" onclick="reddetKullanici(${u.id})">${t("Reddet", "Reject")}</button></td></tr>`;
             });
           } else {
-            tb.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#94a3b8">${t("Bekleyen kullanıcı yok.","No pending users.")}</td></tr>`;
+            tb.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#94a3b8">${t("Bekleyen kullanıcı yok.", "No pending users.")}</td></tr>`;
           }
         }
 
@@ -1946,18 +2311,6 @@
           }
         }
 
-        // Fire Raporu
-        const fire = await apiIstek("/fire-raporu");
-        if (fire)
-          animateValue(
-            "fire-zarari",
-            0,
-            parseFloat(fire.toplam_fire_zarari_tl || 0),
-            2000,
-            " ₺",
-          );
-        else document.getElementById("fire-zarari").innerText = gizliTxt;
-
         // Tahmin Verisi Çek (Modele Göndermek Üzere Ram'e al)
         const ai = await apiIstek("/talep-tahmini");
         if (
@@ -1967,17 +2320,6 @@
         ) {
           window.aiTahminTextTR = ai.haftalik_talep_tahmini[0].urun_adi_tr;
           window.aiTahminTextEN = ai.haftalik_talep_tahmini[0].urun_adi_en;
-        }
-
-        // Grafikler
-        const sevk = await apiIstek("/sevk-raporu");
-        if (
-          sevk &&
-          sevk.grafik_2_cizgi &&
-          document.getElementById("lineChart")
-        ) {
-          cizgiGrafikCiz(sevk.grafik_2_cizgi.veriler);
-          pastaGrafikCiz(sevk.grafik_1_pasta.veriler);
         }
 
         // Tablo
@@ -2580,15 +2922,14 @@
         );
 
         setTimeout(() => {
-          let fireTutar =
-            document.getElementById("fire-zarari").innerText || "?";
-          let ciro = document.getElementById("gunluk-ciro").innerText || "?";
+          let stokDeger = document.getElementById("kpi-stock-value")?.innerText || "?";
+          let dusukStok = document.getElementById("kpi-low-stock")?.innerText || "?";
 
           let tahminTR = window.aiTahminTextTR || "Belirsiz Dağılım";
           let tahminEN = window.aiTahminTextEN || "Unknown Distribution";
 
-          let repTR = `Kurumsal Lojistik Modeli Analizi Tamamlandı. ✅<br><br>Günün başarılı personelleri sayesinde üretilen güçlü ciro <b>${ciro}</b> olarak tespit edilirken, LIFO döngüsü hatalarından veya raf ömründen kaynaklanan aylık depo fire zayiatı <b>${fireTutar}</b> seviyelerinde tutuluyor.<br><br><b>🚨 Tahmine Dayalı Tedarik Uyarısı:</b> Sistem regülasyon trendlerine göre tedarik edilmesi gereken en akıllı yatırım <b>"${tahminTR}"</b> kaleminde görülmektedir. İlgili webhook logları satın alma departmanına iletilebilir.`;
-          let repEN = `Enterprise Logistics Model Analysis Complete. ✅<br><br>Daily revenue generated by top-performing staff is <b>${ciro}</b>, while monthly warehouse spoilage loss from shelf-life expiration or LIFO discrepancies remains successfully trapped at <b>${fireTutar}</b>.<br><br><b>🚨 Predictive Supply Warning:</b> Based on AI consumption trends, the smartest predictive restock investment is projected on <b>"${tahminEN}"</b>. Related webhook logs can be immediately forwarded to procurement.`;
+          let repTR = `Kurumsal Envanter Analizi Tamamlandı. ✅<br><br>Toplam stok değeri <b>${stokDeger}</b> olarak hesaplanmıştır. Kritik ve tükenmiş ürün sayısı <b>${dusukStok}</b> seviyesindedir.<br><br><b>🚨 Tahmine Dayalı Tedarik Uyarısı:</b> Sistem regülasyon trendlerine göre tedarik edilmesi gereken en akıllı yatırım <b>"${tahminTR}"</b> kaleminde görülmektedir. İlgili webhook logları satın alma departmanına iletilebilir.`;
+          let repEN = `Enterprise Inventory Analysis Complete. ✅<br><br>Total stock value is calculated at <b>${stokDeger}</b>. Critical and out-of-stock items stand at <b>${dusukStok}</b>.<br><br><b>🚨 Predictive Supply Warning:</b> Based on AI consumption trends, the smartest predictive restock investment is projected on <b>"${tahminEN}"</b>. Related webhook logs can be immediately forwarded to procurement.`;
 
           textElem.setAttribute("data-tr", repTR);
           textElem.setAttribute("data-en", repEN);
@@ -2597,53 +2938,68 @@
       }
 
       // --- DASHBOARD CHART.JS ---
-      function cizgiGrafikCiz(veriler) {
-        const ctx = document.getElementById("lineChart");
+      function stokHareketiGrafikCiz(movements) {
+        const ctx = document.getElementById("barChart");
         if (!ctx) return;
-        if (lineChartInstance) lineChartInstance.destroy();
+        if (barChartInstance) barChartInstance.destroy();
         let dLoc = currentLang === "TR" ? "tr-TR" : "en-US";
-        const et = veriler.map((v) =>
-          new Date(v.tarih).toLocaleDateString(dLoc, { weekday: "short" }),
+        const labels = movements.map((m) =>
+          new Date(m.date).toLocaleDateString(dLoc, { weekday: "short", day: "numeric" }),
         );
-        const dg = veriler.map((v) => v.gunluk_cikis_adeti);
         Chart.defaults.color = "#94a3b8";
-        lineChartInstance = new Chart(ctx.getContext("2d"), {
-          type: "line",
+        barChartInstance = new Chart(ctx.getContext("2d"), {
+          type: "bar",
           data: {
-            labels: et,
+            labels: labels,
             datasets: [
               {
-                label: t("Lojistik Çıkış", "Logistics Outflow"),
-                data: dg,
+                label: t("Giriş", "Stock In"),
+                data: movements.map((m) => m.stock_in),
+                backgroundColor: "rgba(52, 211, 153, 0.7)",
                 borderColor: "#34d399",
-                tension: 0.4,
-                fill: true,
-                backgroundColor: "rgba(52, 211, 153, 0.1)",
+                borderWidth: 1,
+              },
+              {
+                label: t("Çıkış", "Stock Out"),
+                data: movements.map((m) => m.stock_out),
+                backgroundColor: "rgba(251, 113, 133, 0.7)",
+                borderColor: "#fb7185",
+                borderWidth: 1,
               },
             ],
           },
-          options: { responsive: true, maintainAspectRatio: false },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              y: { beginAtZero: true, grid: { color: "rgba(148,163,184,0.1)" } },
+              x: { grid: { display: false } },
+            },
+          },
         });
       }
-      function pastaGrafikCiz(veriler) {
+      function kategoriPastaGrafikCiz(categories) {
         const ctx = document.getElementById("pieChart");
         if (!ctx) return;
         if (pieChartInstance) pieChartInstance.destroy();
         pieChartInstance = new Chart(ctx.getContext("2d"), {
           type: "doughnut",
           data: {
-            labels: veriler.map((v) =>
-              currentLang === "TR" ? v.name_tr : v.name_en || v.name_tr,
+            labels: categories.map((c) =>
+              currentLang === "TR" ? c.category_tr : c.category_en || c.category_tr,
             ),
             datasets: [
               {
-                data: veriler.map((v) => v.toplam_sevk),
+                data: categories.map((c) => c.total_stock),
                 backgroundColor: [
                   "#34d399",
                   "#60a5fa",
                   "#fb7185",
                   "#c084fc",
                   "#facc15",
+                  "#f97316",
+                  "#06b6d4",
+                  "#a78bfa",
                 ],
                 borderWidth: 0,
               },
