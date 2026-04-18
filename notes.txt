@@ -159,3 +159,16 @@ class TestProductCreate:
                         client.delete(f"/urun/{u['product_id']}", headers=hdrs)
 
 #=============================================#
+
+
+
+1- Dashboardda ki Lojistik çıkış eğilimi grafiğini kaldırıp mini tablo halinde ürün girdisi, çıktısı, tarihi, cinsi, ve ürün adı olacak şekilde değiştirilecek. Bu mini tablonun üstüne clicklendiğinde ilgili ürünün detay sayfasına gidilecek.(Ana Depo envanterine yönlendirilecek.) (LATER)
+2- Pos uygulaması anlık olarak iptal ana depoya gelen ve sipariş edilen ürünleri kapsayacak şekilde düzeltelim. Yani bu dashboarddaki grafikler için de geçerli olacak sadece depo girdi çıktı ve anlık olarak depoda olan ürünleri hesaba katacağız.  
+3- Stock Movement Log da ki datalar silinecek. 
+YAPILDI
+
+
+YAPILACAK 
+Onay Bekleyen İşlemler Adminden Silinecek sadece depo müdürü ve depo elemanı arasında ayarlanıcak.
+Roller için e-mail authentication ve crypto ile şifreleme eklenecek.
+Depo elemanı yetkileri düzenlenecek.

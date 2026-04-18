@@ -53,7 +53,7 @@ from schemas import StockTransaction, ProductCreate, ProductUpdate, TalepYaniti,
 class RegisterUser(BaseModel):
     username: str
     password: str
-    role: str = "Barista"
+    role: str = "Depo Elemanı"
 
 class SupplyApprovalRequest(BaseModel):
     product_id: int
@@ -303,7 +303,7 @@ def register_user(user_data: RegisterUser, db: Session = Depends(get_db)):
     if mevcut:
         raise HTTPException(status_code=409, detail="Bu kullanıcı adı sistemde zaten kayıtlı! Lütfen farklı bir isim seçin.")
 
-    role = user_data.role if user_data.role in ["Admin", "Depo Müdürü", "Barista"] else "Barista"
+    role = user_data.role if user_data.role in ["Admin", "Depo Müdürü", "Depo Elemanı"] else "Depo Elemanı"
     # Admin dışındaki tüm yeni kayıtlar onay bekler.
     is_approved = 1 if role == "Admin" else 0
     try:
@@ -359,7 +359,7 @@ def reject_user(user_id: int, current_user=Depends(get_current_user), db: Sessio
 # --- 1. SİSTEMİN KALBİ (UÇ NOKTALAR) ---
 # ==========================================
 
-@app.get("/urunler", dependencies=[Depends(role_required(["Admin", "Depo Müdürü", "Barista"]))])
+@app.get("/urunler", dependencies=[Depends(role_required(["Admin", "Depo Müdürü", "Depo Elemanı"]))])
 def urunleri_getir(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     urunler = db.query(models.Product).offset(skip).limit(limit).all()
     sonuc = []
@@ -446,13 +446,28 @@ def urun_guncelle(product_id: int, urun: ProductUpdate, current_user: models.Use
     mevcut = db.query(models.Product).filter(models.Product.product_id == product_id).first()
     if not mevcut:
         raise HTTPException(status_code=404, detail="Ürün bulunamadı.")
+    
     degisenler = urun.dict(exclude_unset=True)
+    price_changes = []
+    
+    if "unit_cost" in degisenler and float(degisenler["unit_cost"]) != float(mevcut.unit_cost):
+        price_changes.append(f"Maliyet: {mevcut.unit_cost} -> {degisenler['unit_cost']}")
+    if "unit_price" in degisenler and float(degisenler["unit_price"]) != float(mevcut.unit_price):
+        price_changes.append(f"Satış: {mevcut.unit_price} -> {degisenler['unit_price']}")
+
     for alan, deger in degisenler.items():
         setattr(mevcut, alan, deger)
     db.commit()
-    _log_audit(db, actor=current_user.username, role=current_user.role,
-               action="PRODUCT_UPDATE", resource=mevcut.name_tr,
-               detail=", ".join(f"{k}={v}" for k, v in degisenler.items()))
+
+    if price_changes:
+        _log_audit(db, actor=current_user.username, role=current_user.role,
+                   action="PRICE_CHANGE", resource=mevcut.name_tr,
+                   detail=" | ".join(price_changes))
+    else:
+        _log_audit(db, actor=current_user.username, role=current_user.role,
+                   action="PRODUCT_UPDATE", resource=mevcut.name_tr,
+                   detail=", ".join(f"{k}={v}" for k, v in degisenler.items()))
+                   
     return {"mesaj": f"{mevcut.name_tr} güncellendi."}
 
 
@@ -486,6 +501,7 @@ def stok_hareket_log(limit: int = 50, db: Session = Depends(get_db)):
         sku = h.product.sku if h.product else "-"
         sonuc.append({
             "transaction_id": h.transaction_id,
+            "product_id": h.product_id,
             "sku": sku,
             "urun_adi": urun_adi,
             "quantity": h.quantity,
@@ -675,10 +691,10 @@ def stok_yasam_dongusu(db: Session = Depends(get_db)):
 
 # --- GERÇEK ZAMANLI İŞLEM UÇ NOKTASI (ASYNC WEBSOCKET) ---
 @app.post("/stok-hareketi")
-async def stok_hareketi_kaydet(hareket: StockTransaction, background_tasks: BackgroundTasks, current_user: models.User = Depends(role_required(["Admin", "Barista", "Depo Müdürü"])), db: Session = Depends(get_db)):
+async def stok_hareketi_kaydet(hareket: StockTransaction, background_tasks: BackgroundTasks, current_user: models.User = Depends(role_required(["Admin", "Depo Elemanı", "Depo Müdürü"])), db: Session = Depends(get_db)):
     try:
         # 1. BİLGİSAYAR İŞ MANTIĞI: Barista yapıyorsa bekle, Yetkili yapıyorsa anında vur!
-        islem_durumu = "BEKLEMEDE" if current_user.role == "Barista" else "ONAYLANDI"
+        islem_durumu = "BEKLEMEDE" if current_user.role == "Depo Elemanı" else "ONAYLANDI"
         
         yeni_islem = models.InventoryTransaction(
             product_id=hareket.product_id,
@@ -732,7 +748,7 @@ async def stok_hareketi_kaydet(hareket: StockTransaction, background_tasks: Back
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/dashboard/inventory-summary", dependencies=[Depends(role_required(["Admin", "Depo Müdürü", "Barista"]))])
+@app.get("/dashboard/inventory-summary", dependencies=[Depends(role_required(["Admin", "Depo Müdürü", "Depo Elemanı"]))])
 def dashboard_inventory_summary(db: Session = Depends(get_db)):
     """Live inventory summary powering all dashboard KPIs and charts."""
     bugun = datetime.date.today()
@@ -836,7 +852,7 @@ def tedarikci_siparis(db: Session = Depends(get_db)):
         })
     return {"bekleyen_siparis_listesi": siparisler}
 
-@app.get("/skt-analizi", dependencies=[Depends(role_required(["Admin", "Depo Müdürü", "Barista"]))])
+@app.get("/skt-analizi", dependencies=[Depends(role_required(["Admin", "Depo Müdürü", "Depo Elemanı"]))])
 def skt_analizi(db: Session = Depends(get_db)):
     """Gerçek hayatta LIFO (Son Giren İlk Çıkar) kuralını uygulamak için 30 gün içinde bozulacak SKT riskli ürünleri saptar."""
     bugun = datetime.date.today()

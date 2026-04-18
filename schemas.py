@@ -67,7 +67,7 @@ class StockTransaction(BaseModel):
     notes: Optional[str] = None
     processed_by: str = "Admin"
     # --- YENİ EKLENEN (İş Akışı İçin) ---
-    status: str = "ONAYLANDI" # Kaan Barista ekranından yollarken buraya "BEKLEMEDE" yazacak
+    status: str = "ONAYLANDI" # Kaan Depo Elemanı ekranından yollarken buraya "BEKLEMEDE" yazacak
 
 # En alta Depo Müdürünün talebi yanıtlarken kullanacağı yepyeni şablonu ekle:
 class TalepYaniti(BaseModel):

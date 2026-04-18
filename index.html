@@ -570,8 +570,8 @@
               cursor: pointer;
             "
           >
-            <option value="Barista" style="color: #000">
-              Mağaza Görevlisi (Barista)
+            <option value="Depo Elemanı" style="color: #000">
+              Mağaza Görevlisi (Depo Elemanı)
             </option>
             <option value="Depo Müdürü" style="color: #000">
               Tedarik ve Depo Yöneticisi
@@ -597,6 +597,30 @@
 
     <!-- Canlı Bildirim Merkezi -->
     <div id="toastArea"></div>
+    
+    <!-- Sipariş (Çıkış) Modalı -->
+    <div id="siparisModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); align-items:center; justify-content:center; z-index:9999; backdrop-filter:blur(5px);">
+      <div style="background:var(--surface); padding:2rem; width:400px; border-radius:12px; border:1px solid var(--border); box-shadow:0 10px 40px rgba(0,0,0,0.5);">
+        <h3 style="margin-top:0" id="siparisModalBaslik" data-tr="Sipariş (Çıkış) İsteği" data-en="Order (Stock Out) Request">Sipariş (Çıkış) İsteği</h3>
+        <p style="color:var(--text-muted); font-size:0.9rem;" id="siparisSectigimUrun">-</p>
+        
+        <input type="hidden" id="siparis-product-id" />
+        
+        <div class="ss-field" style="margin-top:15px;">
+          <label><span data-tr="Miktar" data-en="Quantity">Miktar</span> <span id="siparis-max-stock" style="color:var(--accent-blue);font-size:0.8rem"></span></label>
+          <input type="number" id="siparis-miktar" class="login-input" min="1" placeholder="Çıkış yapılacak adet..." />
+        </div>
+        <div class="ss-field">
+          <label data-tr="Açıklama / Not" data-en="Description / Notes">Açıklama / Not</label>
+          <input type="text" id="siparis-not" class="login-input" placeholder="..." />
+        </div>
+        
+        <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
+          <button class="btn" style="background:#475569" onclick="document.getElementById('siparisModal').style.display='none'" data-tr="İptal" data-en="Cancel">İptal</button>
+          <button class="btn btn-red" onclick="siparisGonder()" data-tr="Talebi Gönder" data-en="Submit Request">Talebi Gönder</button>
+        </div>
+      </div>
+    </div>
 
     <div id="appContainer" style="display:none; width:100%; min-height:100vh;">
     <div class="sidebar">
@@ -775,15 +799,29 @@
           </div>
         </div>
         <div class="charts-grid">
-          <div class="chart-container">
+          <div class="chart-container" style="flex:1;">
             <h3
               style="margin-top: 0"
-              data-tr="Stok Hareketleri (Son 7 Gün)"
-              data-en="Stock Movements (Last 7 Days)"
+              data-tr="Son İşlemler (Girdi/Çıktı)"
+              data-en="Recent IO (In/Out)"
             >
-              Stok Hareketleri (Son 7 Gün)
+              Son İşlemler (Girdi/Çıktı)
             </h3>
-            <canvas id="barChart" style="max-height: 250px"></canvas>
+            <div style="overflow-x:auto; max-height:250px;">
+              <table class="custom-table" style="font-size:0.85rem; width:100%;" id="miniIoTable">
+                <thead>
+                  <tr>
+                    <th data-tr="Tarih" data-en="Date">Tarih</th>
+                    <th data-tr="İşlem" data-en="Type">İşlem</th>
+                    <th data-tr="Ürün" data-en="Product">Ürün</th>
+                    <th data-tr="Miktar" data-en="Qty">Miktar</th>
+                  </tr>
+                </thead>
+                <tbody id="miniIoBody">
+                  <tr><td colspan="4" style="text-align:center;">Yükleniyor...</td></tr>
+                </tbody>
+              </table>
+            </div>
           </div>
           <div class="chart-container">
             <h3
@@ -914,15 +952,17 @@
                 <th data-tr="Bakiye (Stok)" data-en="Current Stock">
                   Bakiye (Stok)
                 </th>
+                <th data-tr="Maliyet" data-en="Cost">Maliyet</th>
                 <th data-tr="Değer (Fiyat)" data-en="Unit Price">
                   Değer (Fiyat)
                 </th>
+                <th data-tr="İşlem" data-en="Action">İşlem</th>
               </tr>
             </thead>
             <tbody id="depo-table">
               <tr>
                 <td
-                  colspan="8"
+                  colspan="10"
                   style="text-align: center"
                   data-tr="Tüm envanteriniz çekiliyor..."
                   data-en="Fetching all inventory..."
@@ -1157,13 +1197,14 @@
                 <th data-tr="Bakiye (Stok)" data-en="Balance (Stock)">
                   Bakiye
                 </th>
+                <th data-tr="Maliyet" data-en="Cost">Maliyet</th>
                 <th data-tr="Değer (Fiyat)" data-en="Value (Price)">Değer</th>
                 <th data-tr="İşlem" data-en="Action">İşlem</th>
               </tr>
             </thead>
             <tbody id="stok-siparis-table">
               <tr>
-                <td colspan="9" style="text-align: center">Yükleniyor...</td>
+                <td colspan="10" style="text-align: center">Yükleniyor...</td>
               </tr>
             </tbody>
           </table>
@@ -1623,7 +1664,22 @@
         return true;
       }
 
-      function bootstrapApp() {
+      async function bootstrapApp() {
+        try {
+          const opt = { method: "GET", headers: getHeaders() };
+          const res = await fetch(API_URL + "/dashboard/inventory-summary", opt);
+          if (res.status === 401) {
+            localStorage.removeItem("token");
+            localStorage.removeItem("role");
+            localStorage.removeItem("username");
+            document.getElementById("loginOverlay").style.display = "flex";
+            document.getElementById("loginOverlay").style.opacity = "1";
+            return;
+          }
+        } catch (e) {
+          console.error("Token verification failed", e);
+        }
+
         const user = localStorage.getItem("username");
         const role = localStorage.getItem("role");
         // Show app, hide login
@@ -1753,7 +1809,7 @@
 
       // --- WEBSOCKETS (CANLI BİLDİRİM MİMARİSİ) ---
       function applyRoleVisibility(role) {
-        const hideForBarista = [
+        const hideForDepoElemani = [
           "nav-dashboard",
           "nav-talepler",
           "nav-raporlar",
@@ -1764,14 +1820,14 @@
         ];
         const hideForDepo = ["nav-audit", "nav-talepler", "nav-pending-users"];
         let toHide = [];
-        if (role === "Barista") toHide = hideForBarista;
+        if (role === "Depo Elemanı") toHide = hideForDepoElemani;
         else if (role === "Depo Müdürü") toHide = hideForDepo;
         // Admin görür hepsini
         toHide.forEach((id) => {
           const el = document.getElementById(id);
           if (el) el.style.display = "none";
         });
-        if (role === "Barista") {
+        if (role === "Depo Elemanı") {
           const depo = document.getElementById("nav-depo");
           if (depo) depo.click();
         }
@@ -1802,6 +1858,7 @@
               <td>${u.warehouse_location || "-"}</td>
               <td>${u.expiration_date || "-"}</td>
               <td style="${u.current_stock < 15 ? "color:var(--accent-red);font-weight:bold" : "color:var(--accent-green);font-weight:bold"}">${u.current_stock}</td>
+              <td style="color:var(--text-muted)">₺${(u.unit_cost || 0).toFixed(2)}</td>
               <td>₺${(u.unit_price || 0).toFixed(2)}</td>
               <td>
                 <button class="btn" onclick="stokSiparisFormAc(${u.product_id})" style="padding:4px 10px; font-size:0.8rem;">${t("Düzenle", "Edit")}</button>
@@ -1810,7 +1867,7 @@
             </tr>`;
           });
         } else {
-          tbl.innerHTML = `<tr><td colspan="9" style="text-align:center;color:#94a3b8">${t("Kayıt yok.", "No records.")}</td></tr>`;
+          tbl.innerHTML = `<tr><td colspan="10" style="text-align:center;color:#94a3b8">${t("Kayıt yok.", "No records.")}</td></tr>`;
         }
 
         const logTbl = document.getElementById("stok-log-table");
@@ -2092,6 +2149,41 @@
         }
       }
 
+      function siparisFormunuAc(productId, sku, name, currentStock) {
+        document.getElementById('siparis-product-id').value = productId;
+        document.getElementById('siparisSectigimUrun').innerHTML = `<b>${name}</b> <small>(${sku})</small>`;
+        document.getElementById('siparis-max-stock').innerText = `(Depo Mevcudu: ${currentStock})`;
+        document.getElementById('siparis-miktar').value = "";
+        document.getElementById('siparis-not').value = "";
+        document.getElementById('siparisModal').style.display = 'flex';
+      }
+
+      async function siparisGonder() {
+        const pId = parseInt(document.getElementById('siparis-product-id').value);
+        const qty = parseInt(document.getElementById('siparis-miktar').value);
+        const notlar = document.getElementById('siparis-not').value;
+        const role = localStorage.getItem("role");
+        
+        if (isNaN(qty) || qty <= 0) {
+            geciciUyariGoster(t("Geçerli bir miktar girin.", "Enter a valid quantity."));
+            return;
+        }
+        
+        const payload = {
+            product_id: pId,
+            quantity: qty,
+            transaction_type: "OUT",
+            notes: notlar || `Sipariş / Çıkış (${role})`
+        };
+        
+        const ok = await apiIstek("/stok-hareketi", "POST", payload);
+        if (ok) {
+            document.getElementById('siparisModal').style.display = 'none';
+            geciciUyariGoster(t("Talebiniz başarıyla iletildi.", "Your request has been submitted."));
+            verileriCek();
+        }
+      }
+
       async function loadYasamDongusu() {
         const tbl = document.getElementById("yasam-dongusu-table");
         if (!tbl) return;
@@ -2248,8 +2340,8 @@
           animateValue("kpi-low-stock", 0, parseInt(invSummary.low_stock_count || 0) + parseInt(invSummary.out_of_stock_count || 0), 1000, t(" Ürün", " Items"));
           animateValue("kpi-near-expiry", 0, parseInt(invSummary.near_expiry_count || 0), 1000, t(" Ürün", " Items"));
 
-          if (document.getElementById("barChart")) {
-            stokHareketiGrafikCiz(invSummary.stock_movement_7d || []);
+          if (document.getElementById("miniIoTable")) {
+            miniIoTabloDoldur();
           }
           if (document.getElementById("pieChart")) {
             kategoriPastaGrafikCiz(invSummary.category_breakdown || []);
@@ -2297,15 +2389,18 @@
                     .replace("Blok", t("Blok", "Block"))
                     .replace("Raf", t("Raf", "Rack"))
                 : t("İşlenmedi", "Not Set");
-              tbodyDepo.innerHTML += `<tr style="transition:0.2s; cursor:pointer;" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='transparent'">
+              let btnSiparis = `<button class="btn" style="padding:4px 8px; font-size:0.75rem; background:rgba(251,113,133,0.1); color:#fb7185; border:1px solid #fb7185;" onclick="siparisFormunuAc(${u.product_id}, '${u.sku || '-'}', '${uName.replace(/'/g, "\\'")}', ${u.current_stock})">${t("Sipariş", "Order")}</button>`;
+              tbodyDepo.innerHTML += `<tr style="transition:0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='transparent'">
                             <td><span style="background:rgba(255,255,255,0.05); padding:4px 8px; border-radius:6px; font-family:monospace; font-size:0.8rem; border:1px solid var(--border)">${u.sku || "SKU-?"}</span></td>
-                            <td onclick="openProductEdit(${u.product_id})"><b>${uName}</b></td>
+                            <td><b>${uName}</b></td>
                             <td>${uCat || t("Diğer", "Other")}</td>
                             <td>${u.supplier_name || "-"}</td>
                             <td><span style="padding:4px 8px; border-radius:4px; font-size:0.85rem; background:rgba(96,165,250,0.1); color:var(--accent-blue);">${wLoc}</span></td>
                             <td>${u.expiration_date || "-"}</td>
                             <td style="${stokStili}">${u.current_stock} <small style='color:var(--text-muted); font-weight:normal;'>ADET</small></td>
+                            <td style="color:var(--text-muted)">₺${u.unit_cost.toFixed(2)}</td>
                             <td>₺${u.unit_price.toFixed(2)}</td>
+                            <td>${btnSiparis}</td>
                         </tr>`;
             });
           }
@@ -2935,6 +3030,48 @@
           textElem.setAttribute("data-en", repEN);
           textElem.innerHTML = currentLang === "TR" ? repTR : repEN;
         }, 2500);
+      }
+
+      // --- DASHBOARD MINI IO TABLOSU ---
+      async function miniIoTabloDoldur() {
+        const bodyEl = document.getElementById("miniIoBody");
+        if (!bodyEl) return;
+        const veri = await apiIstek("/stok-log?limit=8");
+        if (!veri || !veri.log) return;
+        
+        bodyEl.innerHTML = "";
+        if (veri.log.length === 0) {
+            bodyEl.innerHTML = `<tr><td colspan="4" style="text-align:center">${t("Kayıt yok","No records")}</td></tr>`;
+            return;
+        }
+        
+        veri.log.forEach(h => {
+            const tr = document.createElement("tr");
+            tr.style.cursor = "pointer";
+            tr.style.transition = "background-color 0.2s";
+            tr.onmouseover = () => tr.style.backgroundColor = "rgba(255, 255, 255, 0.05)";
+            tr.onmouseout = () => tr.style.backgroundColor = "transparent";
+            tr.onclick = () => {
+                const depoTab = document.getElementById('nav-depo');
+                if (depoTab) tabDegistir('tab-depo', depoTab);
+                if (h.product_id) stokSiparisFormAc(h.product_id);
+            };
+            
+            const tarihOpt = {day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'};
+            const tarihStr = h.transaction_date ? new Date(h.transaction_date).toLocaleString(currentLang === 'TR' ? 'tr-TR' : 'en-US', tarihOpt) : "-";
+            
+            let islemRenkli = `<span style="color:var(--accent-blue)">${h.transaction_type}</span>`;
+            if (h.transaction_type === "IN") islemRenkli = `<span style="color:var(--accent-green); font-weight:bold;">+ GİRİŞ</span>`;
+            if (h.transaction_type === "OUT") islemRenkli = `<span style="color:var(--accent-red); font-weight:bold;">- ÇIKIŞ</span>`;
+            
+            tr.innerHTML = `
+                <td>${tarihStr}</td>
+                <td>${islemRenkli}</td>
+                <td>${h.urun_adi} <br><small style="color:var(--text-muted)">${h.sku || ''}</small></td>
+                <td>${h.quantity}</td>
+            `;
+            bodyEl.appendChild(tr);
+        });
       }
 
       // --- DASHBOARD CHART.JS ---

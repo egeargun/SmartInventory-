@@ -27,17 +27,12 @@ const API_ROUTES = [
   "/dashboard-ozet",
   "/urunler",
   "/sevk-raporu",
-  // '/ai-predictor',
   "/audit-logs",
   "/bekleyen-talepler",
   "/tedarikci-siparis",
   "/skt-analizi",
-  "/fire-raporu",
-  "/menu-getir",
-  "/kasa-menu-katmanli",
-  "/masa-liste",
-  "/talep-tahmini",
-  "/api/v1/api-keys",
+  "/stok-log",
+  "/dashboard/inventory-summary"
 ];
 
 // ============================================================
