@@ -172,3 +172,28 @@ YAPILACAK
 Onay Bekleyen İşlemler Adminden Silinecek sadece depo müdürü ve depo elemanı arasında ayarlanıcak.
 Roller için e-mail authentication ve crypto ile şifreleme eklenecek.
 Depo elemanı yetkileri düzenlenecek.
+TR/ENG kısmında Db deki veriler düzeltilecek.
+
+
+UPDATES
+
+
+Rol Bazlı Yetkilendirme Güncellendi:
+
+Hızlı geçici yetki (Bypass) sağlayan Admin kuralları kaldırıldı.
+Tüm "Onay Bekleyen İşlemler" yetkileri tamamen Admin'den arındırıldı ve sadece "Depo Müdürü" (Depo Müdürü) için yetkilendirildi.
+Pano (Frontend) üzerinden Admin login olduğunda "Onay Bekleyen İşlemler" tabı tamamen görünmez hale getirildi, böylece talepler yönetici ekranında yığılmayacak.
+E-mail Auth & Crypto (Güvenlik):
+
+MySQL veritabanına email kolonu entegre edilerek tüm eski kullanıcılara hesap formatlı otomatik mailler tanımlandı (Örn: admin@smartinventory.com).
+Arayüz (index.html) üzerinden kayıt ekranı E-mail kabul edilecek şekilde genişletildi ve /register modeline yansıtıldı.
+Login işlemleri ve JWT Token doğrulamaları e-mail desteği kazanacak ve şifrelerin industry-standard bcrypt formatında encrypt edilmiş haliyle DB'ye girilmesi/denetlenmesi garanti altına alındı.
+TR/ENG Database Veri Validasyonu:
+
+Yazdığım özel Script üzerinden aktif veritabanındaki (MySQL) kayıtları sorguladım.
+Toplam 34 üründe eksik olan, girilmemiş veya boş kalmış Türkçe/İngilizce açıklamalar ve kategori başlıkları (Description) algılanarak otomatik placeholder'lar ile dolduruldu. Veritabanındaki boşluk hatası (NoneType) sorunları çözüldü.
+Tüm detaylı işlem geçmişine ve sonuçlara oluşturduğum 
+Walkthrough Raporu
+ üzerinden ulaşabilirsin.
+
+uvicorn main:app --reload komutu ile sunucuyu başlatıp, admin@smartinventory.com / 123 e-posta destekli girişle test edebilirsin. Başka bir değişiklik istersen buradayım!

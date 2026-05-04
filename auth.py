@@ -75,7 +75,7 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     except JWTError:
         raise credentials_exception
         
-    user = db.query(models.User).filter(models.User.username == username).first()
+    user = db.query(models.User).filter((models.User.username == username) | (models.User.email == username)).first()
     if user is None:
         raise credentials_exception
     return user
@@ -83,7 +83,7 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
 # JWT Role Checker (Enterprise Seviye)
 def role_required(allowed_roles: list[str]):
     def role_checker(current_user: models.User = Depends(get_current_user)):
-        if current_user.role not in allowed_roles and current_user.role != "Admin":
+        if current_user.role not in allowed_roles:
             raise HTTPException(status_code=403, detail=f"Oturum izni yetersiz. Gereken roller: {', '.join(allowed_roles)}")
         return current_user
     return role_checker

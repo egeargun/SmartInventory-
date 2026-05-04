@@ -52,6 +52,7 @@ from schemas import StockTransaction, ProductCreate, ProductUpdate, TalepYaniti,
 
 class RegisterUser(BaseModel):
     username: str
+    email: str
     password: str
     role: str = "Depo Elemanı"
 
@@ -242,11 +243,11 @@ async def websocket_endpoint(websocket: WebSocket):
 @app.post("/token")
 @limiter.limit("10/minute")  # Brute-force koruması: dakikada max 10 deneme
 def login_for_access_token(request: Request, form_data: dict, db: Session = Depends(get_db)):
-    username = form_data.get("username")
+    email_or_username = form_data.get("username") # Frontend might send email in 'username' field
     password = form_data.get("password")
     ip = get_client_ip(request)
     
-    user = db.query(models.User).filter(models.User.username == username).first()
+    user = db.query(models.User).filter((models.User.email == email_or_username) | (models.User.username == email_or_username)).first()
     if not user or not verify_password(password, user.hashed_password):
         _log_audit(db, actor=username or "unknown", role="-",
                    action="LOGIN_FAILED", detail="Yanlış şifre denendi.", ip_address=ip)
@@ -299,9 +300,9 @@ def refresh_access_token(request: Request, body: dict, db: Session = Depends(get
 # --- 0.5 SİSTEME KAYIT (YENİ PERSONEL) ---
 @app.post("/register")
 def register_user(user_data: RegisterUser, db: Session = Depends(get_db)):
-    mevcut = db.query(models.User).filter(models.User.username == user_data.username).first()
+    mevcut = db.query(models.User).filter((models.User.username == user_data.username) | (models.User.email == user_data.email)).first()
     if mevcut:
-        raise HTTPException(status_code=409, detail="Bu kullanıcı adı sistemde zaten kayıtlı! Lütfen farklı bir isim seçin.")
+        raise HTTPException(status_code=409, detail="Bu kullanıcı adı veya e-mail sistemde zaten kayıtlı! Lütfen farklı bir isim/email seçin.")
 
     role = user_data.role if user_data.role in ["Admin", "Depo Müdürü", "Depo Elemanı"] else "Depo Elemanı"
     # Admin dışındaki tüm yeni kayıtlar onay bekler.
@@ -309,6 +310,7 @@ def register_user(user_data: RegisterUser, db: Session = Depends(get_db)):
     try:
         yeni_kullanici = models.User(
             username=user_data.username,
+            email=user_data.email,
             hashed_password=get_password_hash(user_data.password),
             role=role,
             is_approved=is_approved,
@@ -907,7 +909,7 @@ def talep_tahmini(db: Session = Depends(get_db)):
         
     return {"haftalik_talep_tahmini": sorted(tahminler, key=lambda k: k["gelecek_hafta_tahmini_talep"], reverse=True)}
 
-@app.get("/bekleyen-talepler", dependencies=[Depends(role_required(["Admin", "Depo Müdürü"]))])
+@app.get("/bekleyen-talepler", dependencies=[Depends(role_required(["Depo Müdürü"]))])
 def bekleyen_talepler(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     talepler = db.query(models.InventoryTransaction).filter(models.InventoryTransaction.status == "BEKLEMEDE").offset(skip).limit(limit).all()
     return {"talepler": [{
@@ -921,7 +923,7 @@ def bekleyen_talepler(skip: int = 0, limit: int = 100, db: Session = Depends(get
         } for t in talepler]}
 
 @app.put("/talep-yanitla/{islem_id}")
-async def talep_yanitla(islem_id: int, yanit: TalepYaniti, background_tasks: BackgroundTasks, current_user: models.User = Depends(role_required(["Admin", "Depo Müdürü"])), db: Session = Depends(get_db)):
+async def talep_yanitla(islem_id: int, yanit: TalepYaniti, background_tasks: BackgroundTasks, current_user: models.User = Depends(role_required(["Depo Müdürü"])), db: Session = Depends(get_db)):
     talep = db.query(models.InventoryTransaction).filter(models.InventoryTransaction.transaction_id == islem_id).first()
     if not talep:
         raise HTTPException(status_code=404, detail="Talep bulunamadı.")

@@ -504,8 +504,8 @@
             type="text"
             id="username"
             class="login-input"
-            placeholder="Kullanıcı Adı (Örn: admin)"
-            value="admin"
+            placeholder="E-mail veya Kullanıcı Adı"
+            value="admin@smartinventory.com"
           />
           <input
             type="password"
@@ -552,7 +552,13 @@
             type="text"
             id="regUsername"
             class="login-input"
-            placeholder="Yeni Kullanıcı Adınız"
+            placeholder="Kullanıcı Adınız"
+          />
+          <input
+            type="email"
+            id="regEmail"
+            class="login-input"
+            placeholder="Geçerli E-mail Adresiniz"
           />
           <input
             type="password"
@@ -1584,10 +1590,11 @@
 
       async function sistemeKayitOl() {
         const user = document.getElementById("regUsername").value;
+        const email = document.getElementById("regEmail").value;
         const pass = document.getElementById("regPassword").value;
         const rol = document.getElementById("regRole").value;
         const msgEl = document.getElementById("registerMsg");
-        if (!user || !pass) {
+        if (!user || !pass || !email) {
           msgEl.style.color = "var(--accent-red)";
           msgEl.innerText = "Alanlar Boş Olamaz!";
           return;
@@ -1597,7 +1604,7 @@
           const res = await fetch(window.location.origin + "/register", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ username: user, password: pass, role: rol }),
+            body: JSON.stringify({ username: user, email: email, password: pass, role: rol }),
           });
           const data = await res.json();
           if (data.mesaj) {
@@ -1605,7 +1612,7 @@
             msgEl.innerText = data.mesaj;
             setTimeout(() => {
               switchLoginTab("login");
-              document.getElementById("username").value = user;
+              document.getElementById("username").value = email;
               document.getElementById("password").value = pass;
               msgEl.innerText = "";
             }, 2500);
@@ -1818,11 +1825,14 @@
           "nav-stok-siparis",
           "nav-yasam-dongusu",
         ];
-        const hideForDepo = ["nav-audit", "nav-talepler", "nav-pending-users"];
+        const hideForDepoMuduru = ["nav-audit", "nav-pending-users"];
+        const hideForAdmin = ["nav-talepler"];
+        
         let toHide = [];
         if (role === "Depo Elemanı") toHide = hideForDepoElemani;
-        else if (role === "Depo Müdürü") toHide = hideForDepo;
-        // Admin görür hepsini
+        else if (role === "Depo Müdürü") toHide = hideForDepoMuduru;
+        else if (role === "Admin") toHide = hideForAdmin;
+        
         toHide.forEach((id) => {
           const el = document.getElementById(id);
           if (el) el.style.display = "none";
@@ -2397,7 +2407,7 @@
                             <td>${u.supplier_name || "-"}</td>
                             <td><span style="padding:4px 8px; border-radius:4px; font-size:0.85rem; background:rgba(96,165,250,0.1); color:var(--accent-blue);">${wLoc}</span></td>
                             <td>${u.expiration_date || "-"}</td>
-                            <td style="${stokStili}">${u.current_stock} <small style='color:var(--text-muted); font-weight:normal;'>ADET</small></td>
+                            <td style="${stokStili}">${u.current_stock} <small style='color:var(--text-muted); font-weight:normal;'>${t("ADET", "UNITS")}</small></td>
                             <td style="color:var(--text-muted)">₺${u.unit_cost.toFixed(2)}</td>
                             <td>₺${u.unit_price.toFixed(2)}</td>
                             <td>${btnSiparis}</td>
